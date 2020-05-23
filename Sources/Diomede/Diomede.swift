@@ -31,15 +31,14 @@ extension Data {
 
 extension Array: DataEncodable where Element == Int {
     public func asData() -> Data {
-        let count = self.count.asData()
         let data = self.map { $0.asData() }
-        let combined = data.reduce(count, { $0 + $1 })
+        let combined = data.reduce(Data(), { $0 + $1 })
         return combined
     }
     public static func fromData(_ data: Data) -> Self {
-        let count = Int.fromData(data)
-        let stride = data.count / (count+1)
-        var i = data.index(data.startIndex, offsetBy: stride)
+        let stride = 8
+        let count = data.count / stride
+        var i = data.startIndex
         var values = [Int]()
         for _ in 0..<count {
             let v = Int.fromData(data[i...])

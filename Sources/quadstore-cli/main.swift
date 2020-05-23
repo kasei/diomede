@@ -41,8 +41,8 @@ func iterateQuadIds(txn: OpaquePointer, from e: Environment, usingIndex index: E
     
     if false {
         // assuming we're using the spog index, this will place a range restriction on the values of the subject: ids in the range [0, 100) (exclusive upper bound)
-        let lower = [0,0,0,0].asData().suffix(32) // .suffix because asData uses the first 8 bytes to encode the array length
-        let upper = [100,0,0,0].asData().suffix(32) // .suffix because asData uses the first 8 bytes to encode the array length
+        let lower = [0,0,0,0].asData() // .suffix(32) // .suffix because asData uses the first 8 bytes to encode the array length
+        let upper = [100,0,0,0].asData() // .suffix(32) // .suffix because asData uses the first 8 bytes to encode the array length
         print("from \(lower._hexValue)")
         print("to   \(upper._hexValue)")
         try index.iterate(txn: txn, between: lower, and: upper, handler: iterationHandler)
@@ -109,7 +109,7 @@ func loadRDF(from url: URL, into e: Environment) throws {
         var newGraphs = 0
         var quads = [[Int]]()
         var terms = Set<Term>()
-        try parser.parse(file: url.absoluteString, base: graph.value) { (s, p, o) in
+        try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
             let q = Quad(subject: s, predicate: p, object: o, graph: graph)
             do {
                 var quadIds = [Int]()
