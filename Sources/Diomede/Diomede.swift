@@ -55,7 +55,7 @@ extension Int : DataEncodable {
         return Data(bytes: &be, count: 8)
     }
     public static func fromData(_ data: Data) -> Self {
-        let be: Int64 = data.withUnsafeBytes { $0.pointee }
+        let be: Int64 = data.withUnsafeBytes { $0.load(as: Int64.self) }
         return Int(Int64(bigEndian: be))
     }
 }
@@ -83,6 +83,7 @@ public enum DiomedeError: Error {
     case cursorError
     case insertError
     case getError
+    case indexError
 }
 
 public class Environment {
@@ -203,10 +204,13 @@ public class Environment {
         return d
     }
 
-    public class Database {
+    public class Database: CustomStringConvertible {
         var env: Environment
         var dbi: MDB_dbi = 0
 
+        public var description: String {
+            return "Database(\(self.dbi))"
+        }
         init?(environment: Environment, name: String) {
             self.env = environment
             do {
@@ -221,10 +225,14 @@ public class Environment {
                     if (r != 0) {
                         throw DiomedeError.databaseOpenError
                     }
+                    print("database.init loaded \(dbi)")
                     self.dbi = dbi
                     return 0
                 }
             } catch {
+                return nil
+            }
+            guard dbi != 0 else {
                 return nil
             }
         }

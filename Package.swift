@@ -23,7 +23,9 @@ let package = Package(
         .target(
             name: "Diomede",
             dependencies: [
-            	.product(name: "LMDB", package: "CLMDB")
+            	.product(name: "LMDB", package: "CLMDB"),
+            	"SPARQLSyntax",
+            	"Kineo"
             ]),
         .target(
             name: "diomede-cli",
@@ -31,7 +33,7 @@ let package = Package(
         ),
         .target(
             name: "quadstore-cli",
-            dependencies: ["Diomede", "SPARQLSyntax", "Kineo"]
+            dependencies: ["Diomede"]
         ),
         .testTarget(
             name: "DiomedeTests",
