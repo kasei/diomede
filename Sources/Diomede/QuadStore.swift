@@ -38,6 +38,13 @@ public struct DiomedeQuadStore {
         case gosp
         case gops
     }
+    
+    public enum StaticDatabases: String {
+        case fullIndexes
+        case stats
+        case id_to_term
+        case term_to_id
+    }
     var env: Environment
     var t2i: Environment.Database
     var i2t: Environment.Database
@@ -48,10 +55,10 @@ public struct DiomedeQuadStore {
     init?(environment e: Environment) {
         self.env = e
         
-        guard let indexes = e.database(named: "fullIndexes"),
-            let stats = e.database(named: "stats"),
-            let i2t = e.database(named: "id_to_term"),
-            let t2i = e.database(named: "term_to_id") else { return nil }
+        guard let indexes = e.database(named: StaticDatabases.fullIndexes.rawValue),
+            let stats = e.database(named: StaticDatabases.stats.rawValue),
+            let i2t = e.database(named: StaticDatabases.id_to_term.rawValue),
+            let t2i = e.database(named: StaticDatabases.term_to_id.rawValue) else { return nil }
         self.i2t = i2t
         self.t2i = t2i
         self.stats = stats
@@ -94,15 +101,15 @@ public struct DiomedeQuadStore {
                 guard let e = Environment(path: path) else {
                     fatalError()
                 }
-                try e.createDatabase(named: "stats")
-                try e.createDatabase(named: "fullIndexes")
-                try e.createDatabase(named: "term_to_id")
-                try e.createDatabase(named: "id_to_term")
-                let stats = e.database(named: "stats")!
+                try e.createDatabase(named: StaticDatabases.stats.rawValue)
+                try e.createDatabase(named: StaticDatabases.fullIndexes.rawValue)
+                try e.createDatabase(named: StaticDatabases.term_to_id.rawValue)
+                try e.createDatabase(named: StaticDatabases.id_to_term.rawValue)
+                let stats = e.database(named: StaticDatabases.stats.rawValue)!
                 try e.createDatabase(named: "spog")
                 try e.createDatabase(named: "gpso")
                 
-                let indexes = e.database(named: "fullIndexes")!
+                let indexes = e.database(named: StaticDatabases.fullIndexes.rawValue)!
                 try indexes.insert(uniqueKeysWithValues: [
                     ("spog", [0,1,2,3]),
                     ("gpso", [3,1,0,2])

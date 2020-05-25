@@ -30,7 +30,7 @@ guard let e = Environment(path: path) else {
     fatalError()
 }
 
-let indexes = e.database(named: "fullIndexes")!
+let indexes = e.database(named: DiomedeQuadStore.StaticDatabases.fullIndexes.rawValue)!
 var availableIndexes = Set<String>()
 try indexes.iterate { (k, v) in
     let name = try String.fromData(k)
@@ -38,7 +38,7 @@ try indexes.iterate { (k, v) in
 }
 
 if op == "stats" {
-    let stats = e.database(named: "stats")!
+    let stats = e.database(named: DiomedeQuadStore.StaticDatabases.stats.rawValue)!
     for k in (["Version", "meta", "Last-Modified"]) {
         if let d = try stats.get(key: k) {
             let value = try String.fromData(d)
@@ -60,7 +60,7 @@ if op == "stats" {
     }
 
     print("Indexes:")
-    let indexes = e.database(named: "fullIndexes")!
+    let indexes = e.database(named: DiomedeQuadStore.StaticDatabases.fullIndexes.rawValue)!
     try indexes.iterate { (k, v) in
         let name = try String.fromData(k)
         print("  - \(name)")
@@ -73,7 +73,7 @@ if op == "stats" {
     }
     try qs.loadRDF(from: url)
 } else if op == "terms" {
-    let i2t = e.database(named: "id_to_term")!
+    let i2t = e.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
     try i2t.iterate { (k, v) in
         let key = Int.fromData(k)
         let value = try Term.fromData(v)
@@ -81,8 +81,8 @@ if op == "stats" {
         let term_hash = try Data(SHA256.hash(data: value.asData()))
         print("\(key): \(value) (\(term_hash._hexValue))")
     }
-    } else if op == "hashes" {
-    let t2i = e.database(named: "term_to_id")!
+} else if op == "hashes" {
+    let t2i = e.database(named: DiomedeQuadStore.StaticDatabases.term_to_id.rawValue)!
     try t2i.iterate { (k, v) in
         let key = k
         let value = Int.fromData(v)
@@ -120,7 +120,6 @@ if op == "stats" {
         fatalError("Failed to construct quadstore")
     }
     // -- bestIndex s p g
-    //    let indexes = e.database(named: "fullIndexes")!
     let positions = args[2...].joined()
     var bound = Set<Int>()
     for p in args[2...] {
