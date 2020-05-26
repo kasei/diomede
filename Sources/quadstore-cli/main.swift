@@ -133,6 +133,14 @@ if op == "stats" {
         throw DiomedeError.indexError
     }
     try qs.dropFullIndex(order: indexOrder)
+} else if op == "stream" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let quads = try qs.quadsIterator()
+    while let quad = quads.next() {
+        print(quad)
+    }
 } else if op == "quads" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
