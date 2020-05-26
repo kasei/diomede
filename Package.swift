@@ -11,11 +11,14 @@ let package = Package(
         .library(
             name: "Diomede",
             targets: ["Diomede"]),
+        .library(
+            name: "DiomedeQuadStore",
+            targets: ["DiomedeQuadStore"]),
     ],
     dependencies: [
         .package(url: "https://github.com/agisboye/CLMDB.git", from: "0.9.24"),
 		.package(name: "SPARQLSyntax", url: "https://github.com/kasei/swift-sparql-syntax.git", .upToNextMinor(from: "0.0.99")),
-		.package(name: "Kineo", url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.79")),
+		.package(name: "Kineo", url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.80")),
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -25,6 +28,12 @@ let package = Package(
             dependencies: [
             	.product(name: "LMDB", package: "CLMDB"),
             	"SPARQLSyntax",
+            ]),
+        .target(
+            name: "DiomedeQuadStore",
+            dependencies: [
+            	"Diomede",
+            	"SPARQLSyntax",
             	"Kineo"
             ]),
         .target(
@@ -33,7 +42,7 @@ let package = Package(
         ),
         .target(
             name: "quadstore-cli",
-            dependencies: ["Diomede"]
+            dependencies: ["DiomedeQuadStore", "Kineo"]
         ),
         .testTarget(
             name: "DiomedeTests",
