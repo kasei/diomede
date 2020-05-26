@@ -38,6 +38,10 @@ try indexes.iterate { (k, v) in
 }
 
 if op == "stats" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+
     let stats = e.database(named: DiomedeQuadStore.StaticDatabases.stats.rawValue)!
     let graphs = e.database(named: DiomedeQuadStore.StaticDatabases.graphs.rawValue)!
     for k in (["Version", "meta", "Last-Modified"]) {
@@ -46,6 +50,11 @@ if op == "stats" {
             print("\(k): \(value)")
         }
     }
+    
+    if let version = try qs.effectiveVersion() {
+        print("Effective version: \(version)")
+    }
+    
     for k in (["next_unassigned_id"]) {
         if let d = try stats.get(key: k) {
             let value = Int.fromData(d)

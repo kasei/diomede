@@ -66,19 +66,19 @@ public struct DiomedeQuadStore {
         case graphs
     }
     
-    var env: Environment
-    var quads: Environment.Database
-    var t2i: Environment.Database
-    var i2t: Environment.Database
-    var indexes: Environment.Database
-    var stats: Environment.Database
-    var graphs: Environment.Database
+    var env_db: Environment
+    var quads_db: Environment.Database
+    var t2i_db: Environment.Database
+    var i2t_db: Environment.Database
+    var indexes_db: Environment.Database
+    var stats_db: Environment.Database
+    var graphs_db: Environment.Database
     var next_unassigned_id: Int
     var next_quad_id: Int
     var fullIndexes: [IndexOrder: (Environment.Database, [Int])]
     
     private init?(environment e: Environment) {
-        self.env = e
+        self.env_db = e
         
         guard let quads = e.database(named: StaticDatabases.quads.rawValue),
             let indexes = e.database(named: StaticDatabases.fullIndexes.rawValue),
@@ -86,17 +86,17 @@ public struct DiomedeQuadStore {
             let i2t = e.database(named: StaticDatabases.id_to_term.rawValue),
             let t2i = e.database(named: StaticDatabases.term_to_id.rawValue),
             let graphs = e.database(named: StaticDatabases.graphs.rawValue) else { return nil }
-        self.quads = quads
-        self.i2t = i2t
-        self.t2i = t2i
-        self.stats = stats
-        self.graphs = graphs
-        self.indexes = indexes
+        self.quads_db = quads
+        self.i2t_db = i2t
+        self.t2i_db = t2i
+        self.stats_db = stats
+        self.graphs_db = graphs
+        self.indexes_db = indexes
         
         self.fullIndexes = [:]
         do {
-            self.next_unassigned_id = try self.stats.get(key: "next_unassigned_id").map { Int.fromData($0) } ?? 1
-            self.next_quad_id = try self.stats.get(key: "next_quad_id").map { Int.fromData($0) } ?? 1
+            self.next_unassigned_id = try self.stats_db.get(key: "next_unassigned_id").map { Int.fromData($0) } ?? 1
+            self.next_quad_id = try self.stats_db.get(key: "next_quad_id").map { Int.fromData($0) } ?? 1
             var indexPairs = [(IndexOrder, [Int])]()
             try indexes.iterate { (k, v) in
                 let name = try String.fromData(k)
@@ -107,7 +107,7 @@ public struct DiomedeQuadStore {
                 indexPairs.append((key, order))
             }
             
-            try self.env.read { (txn) -> Int in
+            try self.env_db.read { (txn) -> Int in
                 for (key, order) in indexPairs {
                     let name = key.rawValue
                     guard let idb = e.database(txn: txn, named: name) else {
@@ -177,11 +177,11 @@ public struct DiomedeQuadStore {
     }
 
     private func read(handler: (OpaquePointer) throws -> Int) throws {
-        try self.env.read(handler: handler)
+        try self.env_db.read(handler: handler)
     }
 
     private func write(handler: (OpaquePointer) throws -> Int) throws {
-        try self.env.write(handler: handler)
+        try self.env_db.write(handler: handler)
     }
 
     private func bestIndex(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
@@ -253,7 +253,7 @@ public struct DiomedeQuadStore {
             try index.iterate(txn: txn, handler: iterationHandler)
         } else {
             // no index given, just use the quads table
-            try self.quads.iterate(txn: txn) { (qidData, qidsData) in
+            try self.quads_db.iterate(txn: txn) { (qidData, qidsData) in
                 let qid = Int.fromData(qidData)
                 var tids = [Int]()
                 let strideBy = qidsData.count / 4
@@ -272,7 +272,7 @@ public struct DiomedeQuadStore {
         for tid in tids {
             if let cache = cache, let term = cache[tid] {
                 terms.append(term)
-            } else if let tdata = try i2t.get(txn: txn, key: tid) {
+            } else if let tdata = try i2t_db.get(txn: txn, key: tid) {
                 let term = try Term.fromData(tdata)
                 terms.append(term)
                 if let cache = cache {
@@ -298,7 +298,7 @@ public struct DiomedeQuadStore {
             for tid in tids {
                 if let term = cache[tid] {
                     terms.append(term)
-                } else if let tdata = try i2t.get(txn: txn, key: tid) {
+                } else if let tdata = try i2t_db.get(txn: txn, key: tid) {
                     let term = try Term.fromData(tdata)
                     terms.append(term)
                     cache[tid] = term
@@ -319,7 +319,7 @@ public struct DiomedeQuadStore {
     private func id(for term: Term, txn: OpaquePointer) throws -> Int? {
         let d = try term.asData()
         let term_key = Data(SHA256.hash(data: d))
-        if let eid = try self.t2i.get(txn: txn, key: term_key) {
+        if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
             return Int.fromData(eid)
         } else {
             return nil
@@ -351,10 +351,10 @@ extension DiomedeQuadStore {
             indexOrderedPairs.append((indexOrderedKey, qid))
         }
         try self.write { (txn) -> Int in
-            try self.env.createDatabase(txn: txn, named: indexName)
-            let index = self.env.database(txn: txn, named: indexName)!
+            try self.env_db.createDatabase(txn: txn, named: indexName)
+            let index = self.env_db.database(txn: txn, named: indexName)!
             try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
-            try self.indexes.insert(txn: txn, uniqueKeysWithValues: [
+            try self.indexes_db.insert(txn: txn, uniqueKeysWithValues: [
                 (indexName, order),
             ])
             return 0
@@ -365,17 +365,17 @@ extension DiomedeQuadStore {
         let indexName = indexOrder.rawValue
         try self.write { (txn) -> Int in
             self.fullIndexes.removeValue(forKey: indexOrder)
-            try self.indexes.delete(txn: txn, key: indexName)
-            try self.env.dropDatabase(txn: txn, named: indexName)
+            try self.indexes_db.delete(txn: txn, key: indexName)
+            try self.env_db.dropDatabase(txn: txn, named: indexName)
             return 0
         }
     }
     
     public func namedGraphs() throws -> AnyIterator<Term> {
-        let i = try self.graphs.iterator { (txn, data, _) -> Term? in
+        let i = try self.graphs_db.iterator { (txn, data, _) -> Term? in
             do {
                 let gid = Int.fromData(data)
-                if let tdata = try self.i2t.get(txn: txn, key: gid) {
+                if let tdata = try self.i2t_db.get(txn: txn, key: gid) {
                     let term = try Term.fromData(tdata)
                     return term
                 } else {
@@ -391,14 +391,14 @@ extension DiomedeQuadStore {
 
     public func quadsIterator() throws -> AnyIterator<Quad> {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
-        let i = try self.quads.iterator { (txn, k, v) -> Quad? in
+        let i = try self.quads_db.iterator { (txn, k, v) -> Quad? in
             let tids = [Int].fromData(v)
             do {
                 var terms = [Term]()
                 for tid in tids {
                     if let term = cache[tid] {
                         terms.append(term)
-                    } else if let tdata = try self.i2t.get(txn: txn, key: tid) {
+                    } else if let tdata = try self.i2t_db.get(txn: txn, key: tid) {
                         let term = try Term.fromData(tdata)
                         terms.append(term)
                         cache[tid] = term
@@ -425,7 +425,7 @@ extension DiomedeQuadStore {
         var bestIndex: IndexOrder? = nil
         var prefix = [Int]()
         do {
-            try self.env.read { (txn) -> Int in
+            try self.env_db.read { (txn) -> Int in
                 var boundPositions = Set<Int>()
                 for (i, n) in pattern.enumerated() {
                     if case .bound(_) = n {
@@ -490,10 +490,10 @@ extension DiomedeQuadStore {
         let parser = RDFParserCombined()
         let graph = Term(iri: url.absoluteString)
 
-        try env.write { (txn) -> Int in
-            let nextData = try stats.get(txn: txn, key: "next_unassigned_id")
+        try env_db.write { (txn) -> Int in
+            let nextData = try stats_db.get(txn: txn, key: "next_unassigned_id")
             var next = nextData.map { Int.fromData($0) } ?? 1
-            var next_quad_id = try stats.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
+            var next_quad_id = try stats_db.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
             var quadIds = [[Int]]()
@@ -508,14 +508,14 @@ extension DiomedeQuadStore {
                         
                         let term_key = Data(SHA256.hash(data: d))
                         var tid: Int
-                        if let eid = try self.t2i.get(txn: txn, key: term_key) {
+                        if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
                             tid = Int.fromData(eid)
                         } else {
                             tid = next
                             let i2t_pair = (tid, d)
                             let t2i_pair = (Data(SHA256.hash(data: d)), tid)
-                            try self.i2t.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
-                            try self.t2i.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
+                            try self.i2t_db.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
+                            try self.t2i_db.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
                             next += 1
                         }
 
@@ -530,9 +530,9 @@ extension DiomedeQuadStore {
             }
             
             let graphIdPairs = graphIds.map { ($0, Data()) }
-            try self.graphs.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
+            try self.graphs_db.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
             
-            try stats.insert(txn: txn, uniqueKeysWithValues: [
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
                 ("next_unassigned_id", next),
             ])
 
@@ -545,10 +545,17 @@ extension DiomedeQuadStore {
                 next_quad_id += 1
                 quadPairs.append((qid, qkey))
             }
-            try stats.insert(txn: txn, uniqueKeysWithValues: [
+
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
                 ("next_quad_id", next_quad_id),
             ])
-            try self.quads.insert(txn: txn, uniqueKeysWithValues: quadPairs)
+
+            let now = ISO8601DateFormatter().string(from: Date.init())
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                ("Last-Modified", now)
+            ])
+
+            try self.quads_db.insert(txn: txn, uniqueKeysWithValues: quadPairs)
             
             for (_, pair) in self.fullIndexes {
                 let (index, order) = pair
@@ -563,8 +570,9 @@ extension DiomedeQuadStore {
 }
 
 extension DiomedeQuadStore {
+    // private functions that are used in the developer CLI tool diomede-cli
     public var _private_quads: Environment.Database {
-        return self.quads
+        return self.quads_db
     }
     
     public func _private_bestIndex(matchingBoundPositions positions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
@@ -578,4 +586,76 @@ extension DiomedeQuadStore {
     public func _private_iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
         return try self.iterateQuads(txn: txn, usingIndex: indexOrder, handler: handler)
     }
+}
+
+extension DiomedeQuadStore: QuadStoreProtocol {
+    public func effectiveVersion(matching pattern: QuadPattern) throws -> Version? {
+        let f = ISO8601DateFormatter()
+        if let d = try self.stats_db.get(key: "Last-Modified") {
+            let string = try String.fromData(d)
+            if let date = f.date(from: string) {
+                let seconds = UInt64(date.timeIntervalSince1970)
+                print("effective version: \(seconds)")
+                return seconds
+            }
+        }
+        return nil
+    }
+    
+    public var count: Int {
+        var count = 0
+        try? self.read { (txn) -> Int in
+            count = self.quads_db.count(txn: txn)
+            return 0
+        }
+        return count
+    }
+    
+    public func graphs() -> AnyIterator<Term> {
+        do {
+            return try self.namedGraphs()
+        } catch {
+            return AnyIterator([].makeIterator())
+        }
+    }
+    
+    public func graphTerms(in: Term) -> AnyIterator<Term> {
+        fatalError()
+    }
+    
+    public func makeIterator() -> AnyIterator<Quad> {
+        do {
+            return try self.quadsIterator()
+        } catch {
+            return AnyIterator([].makeIterator())
+        }
+    }
+    
+    public func results(matching pattern: QuadPattern) throws -> AnyIterator<TermResult> {
+        var bindings : [String: KeyPath<Quad, Term>] = [:]
+        for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
+            if case .variable(let name, binding: true) = node {
+                bindings[name] = path
+            }
+        }
+        let quads = try self.quads(matching: pattern)
+        let results = quads.lazy.map { (q) -> TermResult in
+            var b = [String: Term]()
+            for (name, path) in bindings {
+                b[name] = q[keyPath: path]
+            }
+            return TermResult(bindings: b)
+        }
+        return AnyIterator(results.makeIterator())
+    }
+    
+    public func countQuads(matching pattern: QuadPattern) throws -> Int {
+        var count = 0
+        for _ in try self.quads(matching: pattern) {
+            count += 1
+        }
+        return count
+    }
+    
+    
 }
