@@ -55,9 +55,9 @@ if op == "stats" {
     let gcount = try graphs.count()
     print("graphs: \(gcount)")
 
-    let spog = e.database(named: "spog")!
+    let quads = e.database(named: "quads")!
     try e.read { (txn) -> Int in
-        let count = spog.count(txn: txn)
+        let count = quads.count(txn: txn)
         print("Quads: \(count)")
         return 0
     }
@@ -96,8 +96,9 @@ if op == "stats" {
         fatalError("Failed to construct quadstore")
     }
     try e.read { (txn) throws -> Int in
-        try qs._private_iterateQuadIds(txn: txn, usingIndex: .spog) { (ids) in
-            print(ids.map { "\($0)" }.joined(separator: " "))
+        try qs._private_iterateQuadIds(txn: txn) { (qid, ids) in
+            let tids = ids.map { "\($0)" }.joined(separator: " ")
+            print("\(qid): \(tids)")
         }
         return 0
     }
@@ -200,8 +201,11 @@ if op == "stats" {
     }
     
     try e.read { (txn) -> Int in
-        let index = try qs._private_bestIndex(matchingBoundPositions: bound, txn: txn)
-        print("Best index for <\(positions)>: \(index.rawValue)")
+        if let index = try qs._private_bestIndex(matchingBoundPositions: bound, txn: txn) {
+            print("Best index for <\(positions)>: \(index.rawValue)")
+        } else {
+            print("No index available for <\(positions)>")
+        }
         return 0
     }
 }

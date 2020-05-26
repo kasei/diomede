@@ -77,10 +77,8 @@ if op == "create" {
                     print("\(key) -> \(value)")
                 }
             } else if op == "dump" {
-                try db.iterate { (k, v) in
-                    guard let key = String(data: k, encoding: .utf8),
-                        let value = String(data: v, encoding: .utf8) else { return }
-                    print("\(key) -> \(value)")
+                try db.iterate { (key, value) in
+                    print("\(key._hexValue) -> \(value._hexValue)")
                 }
             } else {
                 print("OP: \(op)")

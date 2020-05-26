@@ -5,7 +5,7 @@ public enum DiomedeError: Error {
     case unknownError
     case encodingError
     case databaseOpenError
-    case cursorOpenError
+    case cursorOpenError(Int32)
     case cursorError
     case insertError
     case getError
@@ -95,8 +95,9 @@ public class Environment {
             var data = MDB_val(mv_size: 0, mv_data: nil)
 
             var cursor: OpaquePointer?
-            guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
-                throw DiomedeError.cursorOpenError
+            let rc = mdb_cursor_open(txn, dbi, &cursor)
+            guard (rc == 0) else {
+                throw DiomedeError.cursorOpenError(rc)
             }
             defer { mdb_cursor_close(cursor) }
 
@@ -229,8 +230,9 @@ public class Environment {
 
             try env.read { (txn) -> Int in
                 var cursor: OpaquePointer?
-                guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
-                    throw DiomedeError.cursorOpenError
+                let rc = mdb_cursor_open(txn, dbi, &cursor)
+                guard (rc == 0) else {
+                    throw DiomedeError.cursorOpenError(rc)
                 }
                 defer { mdb_cursor_close(cursor) }
 
@@ -246,26 +248,34 @@ public class Environment {
         }
 
         public func iterate(txn: OpaquePointer, handler: (Data, Data) throws -> ()) throws {
+//            print("iterating on database \(name)")
             var key = MDB_val(mv_size: 0, mv_data: nil)
             var data = MDB_val(mv_size: 0, mv_data: nil)
             
             var cursor: OpaquePointer?
-            let rc = mdb_cursor_open(txn, dbi, &cursor)
+            var rc = mdb_cursor_open(txn, dbi, &cursor)
             guard (rc == 0) else {
-                throw DiomedeError.cursorOpenError
+                print("failed to open cursor on database \(dbi)")
+                throw DiomedeError.cursorOpenError(rc)
             }
             defer { mdb_cursor_close(cursor) }
 
-            var op = MDB_FIRST
-            while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
-                op = MDB_NEXT
-                let keyData = Data(bytes: key.mv_data, count: key.mv_size)
-                let valueData = Data(bytes: data.mv_data, count: data.mv_size)
-                try handler(keyData, valueData)
+            rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
+            if rc == 0 {
+                repeat {
+                    let keyData = Data(bytes: key.mv_data, count: key.mv_size)
+                    let valueData = Data(bytes: data.mv_data, count: data.mv_size)
+                    try handler(keyData, valueData)
+                    rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                } while (rc == 0)
+//                print("mdb_cursor_get: \(rc)")
+            } else {
+//                print("mdb_cursor_get: \(rc)")
             }
         }
         
         public func iterate(between lower: Data, and upper: Data, handler: (Data, Data) throws -> ()) throws {
+//            print("iterating on database \(name)")
             try lower.withUnsafeBytes { (lowerPtr) in
                 try upper.withUnsafeBytes { (upperPtr) in
                     var key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
@@ -275,8 +285,9 @@ public class Environment {
 
                     try env.read { (txn) -> Int in
                         var cursor: OpaquePointer?
-                        guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
-                            throw DiomedeError.cursorOpenError
+                        let rc = mdb_cursor_open(txn, dbi, &cursor)
+                        guard (rc == 0) else {
+                            throw DiomedeError.cursorOpenError(rc)
                         }
                         defer { mdb_cursor_close(cursor) }
 
@@ -325,8 +336,9 @@ public class Environment {
                     var upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
                     
                     var cursor: OpaquePointer?
-                    guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
-                        throw DiomedeError.cursorOpenError
+                    let rc = mdb_cursor_open(txn, dbi, &cursor)
+                    guard (rc == 0) else {
+                        throw DiomedeError.cursorOpenError(rc)
                     }
                     defer { mdb_cursor_close(cursor) }
 
@@ -475,12 +487,12 @@ public class Environment {
         public func insert<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, uniqueKeysWithValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
             for (k, v) in keysAndValues {
                 let kData = try k.asData()
-                if name.count == 4 {
-                    if kData.count != 32 {
-                        print("Inserting data into quad index with bad length: \(kData.count): \(kData._hexValue)")
-                        assert(false)
-                    }
-                }
+//                if name.count == 4 {
+//                    if kData.count != 32 {
+//                        print("Inserting data into quad index with bad length: \(kData.count): \(kData._hexValue)")
+//                        assert(false)
+//                    }
+//                }
                 let vData = try v.asData()
                 try kData.withUnsafeBytes { (kPtr) throws in
                     try vData.withUnsafeBytes { (vPtr) throws in
