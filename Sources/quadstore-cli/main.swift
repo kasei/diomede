@@ -5,8 +5,6 @@ import Diomede
 import SPARQLSyntax
 import Kineo
 
-
-
 let args = Array(CommandLine.arguments.dropFirst())
 let cmd = CommandLine.arguments[0]
 guard args.count >= 2 else {
@@ -83,7 +81,18 @@ if op == "stats" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
-    try qs.loadRDF(from: url)
+    
+    
+    let parser = RDFParserCombined()
+    let graph = Term(iri: url.absoluteString)
+    var quads = [Quad]()
+    try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
+        let q = Quad(subject: s, predicate: p, object: o, graph: graph)
+        quads.append(q)
+    }
+    
+    let now = UInt64(Date().timeIntervalSince1970)
+    try qs.load(version: now, quads: quads)
 } else if op == "terms" {
     let i2t = e.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
     try i2t.iterate { (k, v) in
@@ -149,6 +158,19 @@ if op == "stats" {
     let quads = try qs.quadsIterator()
     while let quad = quads.next() {
         print(quad)
+    }
+} else if op == "graphterms" {
+    let line = args[2]
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let p = NTriplesPatternParser(reader: "")
+    guard let node = p.parseNode(line: line), case .bound(let term) = node else {
+        fatalError("Bad graph name")
+    }
+    
+    for o in qs.graphTerms(in: term) {
+        print(o)
     }
 } else if op == "quads" {
     guard let qs = DiomedeQuadStore(path: path) else {
