@@ -39,18 +39,21 @@ try indexes.iterate { (k, v) in
 
 if op == "stats" {
     let stats = e.database(named: DiomedeQuadStore.StaticDatabases.stats.rawValue)!
+    let graphs = e.database(named: DiomedeQuadStore.StaticDatabases.graphs.rawValue)!
     for k in (["Version", "meta", "Last-Modified"]) {
         if let d = try stats.get(key: k) {
             let value = try String.fromData(d)
             print("\(k): \(value)")
         }
     }
-    for k in (["graphs", "next_unassigned_id"]) {
+    for k in (["next_unassigned_id"]) {
         if let d = try stats.get(key: k) {
             let value = Int.fromData(d)
             print("\(k): \(value)")
         }
     }
+    let gcount = try graphs.count()
+    print("graphs: \(gcount)")
 
     let spog = e.database(named: "spog")!
     try e.read { (txn) -> Int in
@@ -92,8 +95,8 @@ if op == "stats" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
-    try qs.read { (txn) throws -> Int in
-        try qs.iterateQuadIds(txn: txn, usingIndex: .spog) { (ids) in
+    try e.read { (txn) throws -> Int in
+        try qs._private_iterateQuadIds(txn: txn, usingIndex: .spog) { (ids) in
             print(ids.map { "\($0)" }.joined(separator: " "))
         }
         return 0
@@ -105,11 +108,70 @@ if op == "stats" {
     guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: op) else {
         throw DiomedeError.indexError
     }
-    try qs.read { (txn) throws -> Int in
-        try qs.iterateQuads(txn: txn, usingIndex: indexOrder) { (q) in
+    try e.read { (txn) throws -> Int in
+        try qs._private_iterateQuads(txn: txn, usingIndex: indexOrder) { (q) in
             print("\(q)")
         }
         return 0
+    }
+    } else if op == "index" {
+    let name = args[2]
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
+        throw DiomedeError.indexError
+    }
+    try qs.addFullIndex(order: indexOrder)
+} else if op == "dropindex" {
+    let name = args[2]
+    guard var qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
+        throw DiomedeError.indexError
+    }
+    try qs.dropFullIndex(order: indexOrder)
+} else if op == "quads" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let qp = QuadPattern.all
+    for q in try qs.quads(matching: qp) {
+        print(q)
+    }
+} else if op == "matchloop" {
+    let line = args[2]
+    while true {
+        guard let qs = DiomedeQuadStore(path: path) else {
+            fatalError("Failed to construct quadstore")
+        }
+        let p = NTriplesPatternParser(reader: "")
+        guard let qp = p.parseQuadPattern(line: line) else {
+            fatalError("Bad quad pattern")
+        }
+        for q in try qs.quads(matching: qp) {
+            print(q)
+        }
+    }
+} else if op == "match" {
+    let line = args[2]
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let p = NTriplesPatternParser(reader: "")
+    guard let qp = p.parseQuadPattern(line: line) else {
+        fatalError("Bad quad pattern")
+    }
+    for q in try qs.quads(matching: qp) {
+        print(q)
+    }
+} else if op == "graphs" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    for g in try qs.namedGraphs() {
+        print(g)
     }
 } else if op == "indexes" {
     for name in availableIndexes {
@@ -137,9 +199,9 @@ if op == "stats" {
         }
     }
     
-    try qs.read { (txn) -> Int in
-        let index = try qs.bestIndex(matchingBoundPositions: bound, txn: txn)
-        print("Best index for <\(positions)>: \(index)")
+    try e.read { (txn) -> Int in
+        let index = try qs._private_bestIndex(matchingBoundPositions: bound, txn: txn)
+        print("Best index for <\(positions)>: \(index.rawValue)")
         return 0
     }
 }

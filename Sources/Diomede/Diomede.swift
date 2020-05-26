@@ -1,80 +1,6 @@
 import Foundation
 import LMDB
 
-public protocol DataEncodable {
-    func asData() throws -> Data
-    static func fromData(_ data: Data) throws -> Self
-}
-
-extension Data : DataEncodable {
-    public func asData() -> Data { return self }
-    public static func fromData(_ data: Data) -> Self { return data }
-}
-
-extension Data {
-    public var _hexValue: String {
-        var s = "0x"
-        for b in self {
-            s += String(format: "%02x", b)
-        }
-        return s
-    }
-    
-    public var _stringValue: String {
-        if let s = String(data: self, encoding: .utf8) {
-            return s
-        } else {
-            return _hexValue
-        }
-    }
-}
-
-extension Array: DataEncodable where Element == Int {
-    public func asData() -> Data {
-        let data = self.map { $0.asData() }
-        let combined = data.reduce(Data(), { $0 + $1 })
-        return combined
-    }
-    public static func fromData(_ data: Data) -> Self {
-        let stride = 8
-        let count = data.count / stride
-        var i = data.startIndex
-        var values = [Int]()
-        for _ in 0..<count {
-            let v = Int.fromData(data[i...])
-            values.append(v)
-            i = data.index(i, offsetBy: stride)
-        }
-        return values
-    }
-}
-
-extension Int : DataEncodable {
-    public func asData() -> Data {
-        var be = Int64(self).bigEndian
-        return Data(bytes: &be, count: 8)
-    }
-    public static func fromData(_ data: Data) -> Self {
-        let be: Int64 = data.withUnsafeBytes { $0.load(as: Int64.self) }
-        return Int(Int64(bigEndian: be))
-    }
-}
-
-extension String : DataEncodable {
-    public func asData() throws -> Data {
-        guard let data = self.data(using: .utf8) else {
-            throw DiomedeError.encodingError
-        }
-        return data
-    }
-    public static func fromData(_ data: Data) throws -> Self {
-        guard let s = String(data: data, encoding: .utf8) else {
-            throw DiomedeError.encodingError
-        }
-        return s
-    }
-}
-
 public enum DiomedeError: Error {
     case unknownError
     case encodingError
@@ -83,7 +9,9 @@ public enum DiomedeError: Error {
     case cursorError
     case insertError
     case getError
+    case deleteError
     case indexError
+    case nonExistentTermError
 }
 
 public class Environment {
@@ -133,8 +61,12 @@ public class Environment {
         if (mdb_txn_begin(env, nil, flags, &txn) == 0) {
             if let txn = txn {
                 do {
-                    let _ = try handler(txn)
-                    mdb_txn_commit(txn)
+                    let r = try handler(txn)
+                    if (r == 0) {
+                        mdb_txn_commit(txn)
+                    } else {
+                        mdb_txn_abort(txn)
+                    }
                 } catch let e {
                     mdb_txn_abort(txn)
                     throw e
@@ -146,9 +78,11 @@ public class Environment {
     public func databases() throws -> [String] {
         var names = [String]()
         try self.read { (txn) throws -> Int in
+            print("databases() read")
             var dbi: MDB_dbi = 0
             let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
                 if (mdb_dbi_open(txn, nil, 0, dbip) != 0) {
+                    print("Failed to open database")
                     return 1
                 }
                 return 0
@@ -164,7 +98,8 @@ public class Environment {
             guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
                 throw DiomedeError.cursorOpenError
             }
-            
+            defer { mdb_cursor_close(cursor) }
+
             var op = MDB_FIRST
             while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                 op = MDB_NEXT
@@ -173,13 +108,12 @@ public class Environment {
                     names.append(name)
                 }
             }
-            mdb_cursor_close(cursor)
             return 0
         }
         return names
     }
     
-    public func createDatabase(named name: String) throws {
+    private func createDatabase(named name: String) throws {
         try self.write { (txn) -> Int in
             var dbi: MDB_dbi = 0
             if (mdb_dbi_open(txn, name, UInt32(MDB_CREATE), &dbi) != 0) {
@@ -189,7 +123,14 @@ public class Environment {
         }
     }
     
-    public func dropDatabase(named name: String) throws {
+    public func createDatabase(txn: OpaquePointer, named name: String) throws {
+        var dbi: MDB_dbi = 0
+        if (mdb_dbi_open(txn, name, UInt32(MDB_CREATE), &dbi) != 0) {
+            throw DiomedeError.databaseOpenError
+        }
+    }
+    
+    private func dropDatabase(named name: String) throws {
         guard let db = self.database(named: name) else {
             throw DiomedeError.databaseOpenError
         }
@@ -199,33 +140,78 @@ public class Environment {
         }
     }
     
+    public func dropDatabase(txn: OpaquePointer, named name: String) throws {
+        guard let db = self.database(named: name) else {
+            throw DiomedeError.databaseOpenError
+        }
+        mdb_drop(txn, db.dbi, 1)
+    }
+    
     public func database(named name: String) -> Database? {
         let d = Database(environment: self, name: name)
+        return d
+    }
+    
+    public func database(txn: OpaquePointer, named name: String) -> Database? {
+        let d = Database(txn: txn, environment: self, name: name)
         return d
     }
 
     public class Database: CustomStringConvertible {
         var env: Environment
         var dbi: MDB_dbi = 0
+        var name: String
 
         public var description: String {
             return "Database(\(self.dbi))"
         }
+        
+        init?(txn: OpaquePointer, environment: Environment, name: String) {
+            self.env = environment
+            self.name = name
+            do {
+                var dbi: MDB_dbi = 0
+                let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
+                    let rc = mdb_dbi_open(txn, name, 0, dbip)
+                    if (rc != 0) {
+                        print("mdb_dbi_open returned [\(rc)]")
+                        return 1
+                    }
+                    return 0
+                }
+                if (r != 0) {
+                    print("*** databaseOpenError")
+                    throw DiomedeError.databaseOpenError
+                }
+                //                    print("loaded dbi \(dbi)")
+                self.dbi = dbi
+            } catch {
+                return nil
+            }
+            guard dbi != 0 else {
+                return nil
+            }
+        }
+        
         init?(environment: Environment, name: String) {
             self.env = environment
+            self.name = name
             do {
                 try env.read { (txn) throws -> Int in
                     var dbi: MDB_dbi = 0
                     let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
-                        if (mdb_dbi_open(txn, name, 0, dbip) != 0) {
+                        let rc = mdb_dbi_open(txn, name, 0, dbip)
+                        if (rc != 0) {
+                            print("mdb_dbi_open returned [\(rc)]")
                             return 1
                         }
                         return 0
                     }
                     if (r != 0) {
+                        print("*** databaseOpenError")
                         throw DiomedeError.databaseOpenError
                     }
-                    print("database.init loaded \(dbi)")
+                    //                    print("loaded dbi \(dbi)")
                     self.dbi = dbi
                     return 0
                 }
@@ -246,7 +232,8 @@ public class Environment {
                 guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
                     throw DiomedeError.cursorOpenError
                 }
-                
+                defer { mdb_cursor_close(cursor) }
+
                 var op = MDB_FIRST
                 while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                     op = MDB_NEXT
@@ -254,7 +241,6 @@ public class Environment {
                     let valueData = Data(bytes: data.mv_data, count: data.mv_size)
                     try handler(keyData, valueData)
                 }
-                mdb_cursor_close(cursor)
                 return 0
             }
         }
@@ -264,10 +250,12 @@ public class Environment {
             var data = MDB_val(mv_size: 0, mv_data: nil)
             
             var cursor: OpaquePointer?
-            guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
+            let rc = mdb_cursor_open(txn, dbi, &cursor)
+            guard (rc == 0) else {
                 throw DiomedeError.cursorOpenError
             }
-            
+            defer { mdb_cursor_close(cursor) }
+
             var op = MDB_FIRST
             while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                 op = MDB_NEXT
@@ -275,7 +263,6 @@ public class Environment {
                 let valueData = Data(bytes: data.mv_data, count: data.mv_size)
                 try handler(keyData, valueData)
             }
-            mdb_cursor_close(cursor)
         }
         
         public func iterate(between lower: Data, and upper: Data, handler: (Data, Data) throws -> ()) throws {
@@ -291,7 +278,8 @@ public class Environment {
                         guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
                             throw DiomedeError.cursorOpenError
                         }
-                        
+                        defer { mdb_cursor_close(cursor) }
+
                         var op = MDB_SET_RANGE
                         while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                             op = MDB_NEXT
@@ -305,7 +293,6 @@ public class Environment {
                             
                             try handler(keyData, valueData)
                         }
-                        mdb_cursor_close(cursor)
                         return 0
                     }
                 }
@@ -318,7 +305,18 @@ public class Environment {
             return stat.ms_entries
         }
         
-        public func iterate(txn: OpaquePointer, between lower: Data, and upper: Data, handler: (Data, Data) throws -> ()) throws {
+        public func count() throws -> Int {
+            var count = 0
+            try self.env.read { (txn) -> Int in
+                var stat = MDB_stat(ms_psize: 0, ms_depth: 0, ms_branch_pages: 0, ms_leaf_pages: 0, ms_overflow_pages: 0, ms_entries: 0)
+                mdb_stat(txn, dbi, &stat)
+                count = stat.ms_entries
+                return 0
+            }
+            return count
+        }
+        
+        public func iterate(txn: OpaquePointer, between lower: Data, and upper: Data, inclusive: Bool, handler: (Data, Data) throws -> ()) throws {
             try lower.withUnsafeBytes { (lowerPtr) in
                 try upper.withUnsafeBytes { (upperPtr) in
                     var key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
@@ -330,7 +328,8 @@ public class Environment {
                     guard (mdb_cursor_open(txn, dbi, &cursor) == 0) else {
                         throw DiomedeError.cursorOpenError
                     }
-                    
+                    defer { mdb_cursor_close(cursor) }
+
                     var op = MDB_SET_RANGE
                     while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                         op = MDB_NEXT
@@ -338,13 +337,19 @@ public class Environment {
                         let valueData = Data(bytes: data.mv_data, count: data.mv_size)
                         
                         let cmp = mdb_cmp(txn, dbi, &key, &upperBound)
-                        if (cmp > 0) {
-                            break
+                        if inclusive {
+                            if (cmp > 0) {
+                                break
+                            }
+                            try handler(keyData, valueData)
+                        } else {
+                            if (cmp >= 0) {
+                                break
+                            }
+                            try handler(keyData, valueData)
                         }
                         
-                        try handler(keyData, valueData)
                     }
-                    mdb_cursor_close(cursor)
                 }
             }
         }
@@ -378,6 +383,33 @@ public class Environment {
                 }
             }
             return exists
+        }
+
+        public func delete(key k: DataEncodable) throws {
+            try env.write { (txn) throws -> Int in
+                let kData = try k.asData()
+                try kData.withUnsafeBytes { (kPtr) throws in
+                    var value = MDB_val(mv_size: 0, mv_data: nil)
+                    var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
+                    let rc = mdb_del(txn, dbi, &key, &value)
+                    if (rc != 0) {
+                        throw DiomedeError.deleteError
+                    }
+                }
+                return 0
+            }
+        }
+        
+        public func delete(txn: OpaquePointer, key k: DataEncodable) throws {
+            let kData = try k.asData()
+            try kData.withUnsafeBytes { (kPtr) throws in
+                var value = MDB_val(mv_size: 0, mv_data: nil)
+                var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
+                let rc = mdb_del(txn, dbi, &key, &value)
+                if (rc != 0) {
+                    throw DiomedeError.deleteError
+                }
+            }
         }
         
         public func get(key k: DataEncodable) throws -> Data? {
@@ -443,6 +475,12 @@ public class Environment {
         public func insert<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, uniqueKeysWithValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
             for (k, v) in keysAndValues {
                 let kData = try k.asData()
+                if name.count == 4 {
+                    if kData.count != 32 {
+                        print("Inserting data into quad index with bad length: \(kData.count): \(kData._hexValue)")
+                        assert(false)
+                    }
+                }
                 let vData = try v.asData()
                 try kData.withUnsafeBytes { (kPtr) throws in
                     try vData.withUnsafeBytes { (vPtr) throws in

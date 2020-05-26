@@ -16,21 +16,28 @@ guard let e = Environment(path: path) else {
 
 guard args.count >= 2 else {
     print("Usage: \(cmd) ENVPATH DATABASE OP")
+    print("Databases:")
     for d in try e.databases() {
-        print("Database: \(d)")
+        print("- \(d)")
     }
     exit(1)
 }
 
 
 let dbname = args[1]
-let op = args[2]
+let op = (args.count > 2) ? args[2] : ""
 
 
 if op == "create" {
-    try e.createDatabase(named: dbname)
+    try e.write { (txn) -> Int in
+        try e.createDatabase(txn: txn, named: dbname)
+        return 0
+    }
 } else if op == "drop" {
-    try e.dropDatabase(named: dbname)
+    try e.write { (txn) -> Int in
+        try e.dropDatabase(txn: txn, named: dbname)
+        return 0
+    }
 } else {
     if let db = e.database(named: dbname) {
         if args.count == 1 {
@@ -79,5 +86,7 @@ if op == "create" {
                 print("OP: \(op)")
             }
         }
+    } else {
+        print("*** No such database: '\(dbname)'")
     }
 }
