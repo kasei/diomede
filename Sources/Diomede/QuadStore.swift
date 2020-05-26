@@ -184,16 +184,6 @@ public struct DiomedeQuadStore {
         try self.env.write(handler: handler)
     }
 
-    public mutating func dropFullIndex(order indexOrder: IndexOrder) throws {
-        let indexName = indexOrder.rawValue
-        try self.write { (txn) -> Int in
-            self.fullIndexes.removeValue(forKey: indexOrder)
-            try self.indexes.delete(txn: txn, key: indexName)
-            try self.env.dropDatabase(txn: txn, named: indexName)
-            return 0
-        }
-    }
-    
     private func bestIndex(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
         let bound = matchingBoundPositions
         var scores = [(Int, IndexOrder)]()
@@ -337,103 +327,8 @@ public struct DiomedeQuadStore {
     }
 }
 
-
 extension DiomedeQuadStore {
-    public func loadRDF(from url: URL) throws {
-        let parser = RDFParserCombined()
-        let graph = Term(iri: url.absoluteString)
-
-        try env.write { (txn) -> Int in
-            let nextData = try stats.get(txn: txn, key: "next_unassigned_id")
-            var next = nextData.map { Int.fromData($0) } ?? 1
-            var next_quad_id = try stats.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
-
-            var graphIds = Set<Int>()
-            var quadIds = [[Int]]()
-            var terms = Set<Term>()
-            try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
-                let q = Quad(subject: s, predicate: p, object: o, graph: graph)
-                do {
-                    var termIds = [Int]()
-                    for (i, t) in q.enumerated() {
-                        terms.insert(t)
-                        let d = try t.asData()
-                        
-                        let term_key = Data(SHA256.hash(data: d))
-                        var tid: Int
-                        if let eid = try self.t2i.get(txn: txn, key: term_key) {
-                            tid = Int.fromData(eid)
-                        } else {
-                            tid = next
-                            let i2t_pair = (tid, d)
-                            let t2i_pair = (Data(SHA256.hash(data: d)), tid)
-                            try self.i2t.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
-                            try self.t2i.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
-                            next += 1
-                        }
-
-                        termIds.append(tid)
-                        if (i == 3) {
-                            graphIds.insert(tid)
-                        }
-                    }
-                    assert(termIds.count == 4)
-                    quadIds.append(termIds)
-                } catch {}
-            }
-            
-            let graphIdPairs = graphIds.map { ($0, Data()) }
-            try self.graphs.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
-            
-            try stats.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_unassigned_id", next),
-            ])
-
-            let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
-            let emptyValue = Data()
-            
-            var quadPairs = [(Int, Data)]()
-            for qkey in quadKeys {
-                let qid = next_quad_id
-                next_quad_id += 1
-                quadPairs.append((qid, qkey))
-            }
-            try stats.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_quad_id", next_quad_id),
-            ])
-            try self.quads.insert(txn: txn, uniqueKeysWithValues: quadPairs)
-            
-            for (_, pair) in self.fullIndexes {
-                let (index, order) = pair
-                let indexOrderedKeys = quadIds.map { (q) in order.map({ q[$0].asData() }).reduce(Data()) { $0 + $1 } }
-                let indexOrderedPairs = indexOrderedKeys.map { ($0, emptyValue) }
-                try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
-            }
-            
-            return 0
-        }
-    }
-}
-
-extension DiomedeQuadStore {
-    public var _private_quads: Environment.Database {
-        return self.quads
-    }
-    
-    public func _private_bestIndex(matchingBoundPositions positions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
-        return try self.bestIndex(matchingBoundPositions: positions, txn: txn)
-    }
-    
-    public func _private_iterateQuadIds(txn: OpaquePointer, usingIndex indexOrder: IndexOrder? = nil, handler: (Int, [Int]) throws -> ()) throws {
-        return try self.iterateQuadIds(txn: txn, usingIndex: indexOrder, handler: handler)
-    }
-
-    public func _private_iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
-        return try self.iterateQuads(txn: txn, usingIndex: indexOrder, handler: handler)
-    }
-}
-
-extension DiomedeQuadStore {
+    // This is the public API
     public func addFullIndex(order indexOrder: IndexOrder) throws {
         if let _ = self.fullIndexes[indexOrder] {
             return
@@ -462,6 +357,16 @@ extension DiomedeQuadStore {
             try self.indexes.insert(txn: txn, uniqueKeysWithValues: [
                 (indexName, order),
             ])
+            return 0
+        }
+    }
+    
+    public mutating func dropFullIndex(order indexOrder: IndexOrder) throws {
+        let indexName = indexOrder.rawValue
+        try self.write { (txn) -> Int in
+            self.fullIndexes.removeValue(forKey: indexOrder)
+            try self.indexes.delete(txn: txn, key: indexName)
+            try self.env.dropDatabase(txn: txn, named: indexName)
             return 0
         }
     }
@@ -576,5 +481,101 @@ extension DiomedeQuadStore {
             let matching = s.lazy.filter { pattern.matches($0) }
             return AnyIterator(matching.makeIterator())
         }
+    }
+}
+
+extension DiomedeQuadStore {
+    // This is public code that depends on the Kineo package
+    public func loadRDF(from url: URL) throws {
+        let parser = RDFParserCombined()
+        let graph = Term(iri: url.absoluteString)
+
+        try env.write { (txn) -> Int in
+            let nextData = try stats.get(txn: txn, key: "next_unassigned_id")
+            var next = nextData.map { Int.fromData($0) } ?? 1
+            var next_quad_id = try stats.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
+
+            var graphIds = Set<Int>()
+            var quadIds = [[Int]]()
+            var terms = Set<Term>()
+            try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
+                let q = Quad(subject: s, predicate: p, object: o, graph: graph)
+                do {
+                    var termIds = [Int]()
+                    for (i, t) in q.enumerated() {
+                        terms.insert(t)
+                        let d = try t.asData()
+                        
+                        let term_key = Data(SHA256.hash(data: d))
+                        var tid: Int
+                        if let eid = try self.t2i.get(txn: txn, key: term_key) {
+                            tid = Int.fromData(eid)
+                        } else {
+                            tid = next
+                            let i2t_pair = (tid, d)
+                            let t2i_pair = (Data(SHA256.hash(data: d)), tid)
+                            try self.i2t.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
+                            try self.t2i.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
+                            next += 1
+                        }
+
+                        termIds.append(tid)
+                        if (i == 3) {
+                            graphIds.insert(tid)
+                        }
+                    }
+                    assert(termIds.count == 4)
+                    quadIds.append(termIds)
+                } catch {}
+            }
+            
+            let graphIdPairs = graphIds.map { ($0, Data()) }
+            try self.graphs.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
+            
+            try stats.insert(txn: txn, uniqueKeysWithValues: [
+                ("next_unassigned_id", next),
+            ])
+
+            let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
+            let emptyValue = Data()
+            
+            var quadPairs = [(Int, Data)]()
+            for qkey in quadKeys {
+                let qid = next_quad_id
+                next_quad_id += 1
+                quadPairs.append((qid, qkey))
+            }
+            try stats.insert(txn: txn, uniqueKeysWithValues: [
+                ("next_quad_id", next_quad_id),
+            ])
+            try self.quads.insert(txn: txn, uniqueKeysWithValues: quadPairs)
+            
+            for (_, pair) in self.fullIndexes {
+                let (index, order) = pair
+                let indexOrderedKeys = quadIds.map { (q) in order.map({ q[$0].asData() }).reduce(Data()) { $0 + $1 } }
+                let indexOrderedPairs = indexOrderedKeys.map { ($0, emptyValue) }
+                try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
+            }
+            
+            return 0
+        }
+    }
+}
+
+extension DiomedeQuadStore {
+    public var _private_quads: Environment.Database {
+        return self.quads
+    }
+    
+    public func _private_bestIndex(matchingBoundPositions positions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
+        return try self.bestIndex(matchingBoundPositions: positions, txn: txn)
+    }
+    
+    public func _private_iterateQuadIds(txn: OpaquePointer, usingIndex indexOrder: IndexOrder? = nil, handler: (Int, [Int]) throws -> ()) throws {
+        return try self.iterateQuadIds(txn: txn, usingIndex: indexOrder, handler: handler)
+    }
+
+    public func _private_iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
+        return try self.iterateQuads(txn: txn, usingIndex: indexOrder, handler: handler)
     }
 }
