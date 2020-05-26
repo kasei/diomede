@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 
 import Diomede
+import DiomedeQuadStore
 import SPARQLSyntax
 import Kineo
 
@@ -11,6 +12,30 @@ guard args.count >= 2 else {
     print("Usage: \(cmd) OP")
 
     exit(0)
+}
+
+
+struct Stdout: TextOutputStream {
+  internal init() {}
+
+  internal mutating func write(_ string: String) {
+    if string.isEmpty { return }
+    var string = string
+    _ = string.withUTF8 { utf8 in
+        fwrite(utf8.baseAddress!, 1, utf8.count, stdout)
+    }
+  }
+}
+
+func printQuads(_ iter: AnyIterator<Quad>) {
+    var out = Stdout()
+    let seq = AnySequence(iter)
+    for q in seq {
+        for t in q {
+            t.printNTriplesString(to: &out)
+        }
+        print(" .")
+    }
 }
 
 let path = args[0]
@@ -177,9 +202,8 @@ if op == "stats" {
         fatalError("Failed to construct quadstore")
     }
     let qp = QuadPattern.all
-    for q in try qs.quads(matching: qp) {
-        print(q)
-    }
+    let i = try qs.quads(matching: qp)
+    printQuads(i)
 } else if op == "matchloop" {
     let line = args[2]
     while true {
@@ -190,9 +214,8 @@ if op == "stats" {
         guard let qp = p.parseQuadPattern(line: line) else {
             fatalError("Bad quad pattern")
         }
-        for q in try qs.quads(matching: qp) {
-            print(q)
-        }
+        let i = try qs.quads(matching: qp)
+        printQuads(i)
     }
 } else if op == "match" {
     let line = args[2]
@@ -203,9 +226,8 @@ if op == "stats" {
     guard let qp = p.parseQuadPattern(line: line) else {
         fatalError("Bad quad pattern")
     }
-    for q in try qs.quads(matching: qp) {
-        print(q)
-    }
+    let i = try qs.quads(matching: qp)
+    printQuads(i)
 } else if op == "graphs" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
