@@ -19,7 +19,14 @@ extension Term: DataEncodable {
         case .language(let lang):
             s = "L\(lang)\"" + self.value
         case .datatype(let dt):
-            s = "D\(dt.value)\"" + self.value
+            switch dt {
+            case .string:
+                s = "S\"" + self.value
+            case .integer:
+                s = "i\"" + self.value
+            default:
+                s = "D\(dt.value)\"" + self.value
+            }
         }
         return try s.asData()
     }
@@ -42,6 +49,10 @@ extension Term: DataEncodable {
         case "L":
             let lang = String(s.dropFirst().prefix(while: { $0 != "\"" }))
             return Term(value: value, type: .language(lang))
+        case "S":
+            return Term(value: value, type: .datatype(.string))
+        case "i":
+            return Term(value: value, type: .datatype(.integer))
         case "D":
             let dt = String(s.dropFirst(1).prefix(while: { $0 != "\"" }))
             return Term(value: value, type: .datatype(.custom(dt)))
