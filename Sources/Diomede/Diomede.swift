@@ -23,11 +23,6 @@ public class Environment {
             return nil
         }
         
-        if (mdb_env_set_maxreaders(env, 1) != 0) {
-            mdb_env_close(env)
-            return nil
-        }
-        
         if (mdb_env_set_mapsize(env, 8192000000) != 0) {
             mdb_env_close(env)
             return nil
