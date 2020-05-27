@@ -37,7 +37,8 @@ public class Environment {
         }
         
         
-        if (mdb_env_open(env, path, UInt32(MDB_NOTLS | MDB_NOSYNC), 0o0640) != 0) {
+        let flags = MDB_NOSYNC // | MDB_NOTLS
+        if (mdb_env_open(env, path, UInt32(flags), 0o0640) != 0) {
             mdb_env_close(env)
             env = nil
             return nil
@@ -63,7 +64,7 @@ public class Environment {
         let rc = mdb_txn_begin(env, nil, flags, &txn)
         if (rc == 0) {
             let txid = mdb_txn_id(txn)
-//            print("BEGIN \(txid)")
+            print("BEGIN \(txid)")
             if let txn = txn {
                 do {
                     let r = try handler(txn)
@@ -71,14 +72,14 @@ public class Environment {
                         let read_only = (UInt32(MDB_RDONLY) & flags) != 0
                         if read_only {
                             mdb_txn_abort(txn)
-//                            print("ROLLBACK \(txid)")
+                            print("ROLLBACK \(txid)")
                         } else {
                             mdb_txn_commit(txn)
-//                            print("COMMIT \(txid)")
+                            print("COMMIT \(txid)")
                         }
                     } else {
                         mdb_txn_abort(txn)
-//                        print("ROLLBACK \(txid)")
+                        print("ROLLBACK \(txid)")
                     }
                 } catch let e {
                     mdb_txn_abort(txn)
@@ -175,79 +176,88 @@ public class Environment {
         return d
     }
 
-    public class Cursor: IteratorProtocol {
-        public typealias Element = (OpaquePointer, Data, Data)
-        var txn : OpaquePointer
-        var cursor: OpaquePointer
-        var key : MDB_val
-        var data : MDB_val
-        var upperBound : Data?
-        var inclusive : Bool
-        var rc: Int32
-
-        init?(txn : OpaquePointer, cursor: OpaquePointer, lowerBound: DataEncodable? = nil, upperBound: DataEncodable? = nil, inclusive: Bool = false) {
-            self.txn = txn
-            self.cursor = cursor
-            self.key = MDB_val(mv_size: 0, mv_data: nil)
-            self.data = MDB_val(mv_size: 0, mv_data: nil)
-            self.upperBound = nil
-            self.inclusive = inclusive
-            self.rc = 0
-            
-            var lower: Data? = nil
-            do {
-                self.upperBound = try upperBound?.asData()
-                lower = try lowerBound?.asData()
-                
-                if let lower = lower {
-                    
-                    lower.withUnsafeBytes { (lowerPtr) in
-                        self.key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
-                    }
-                    self.rc = mdb_cursor_get(cursor, &self.key, &self.data, MDB_SET_RANGE)
-                } else {
-                    self.rc = mdb_cursor_get(cursor, &self.key, &self.data, MDB_FIRST)
-                }
-            } catch {
-                return nil
-            }
-        }
-
-        deinit {
-            let txid = mdb_txn_id(txn)
-            mdb_cursor_close(cursor)
-            mdb_txn_commit(txn)
+//    public class _Cursor: IteratorProtocol {
+//        public typealias Element = (OpaquePointer, Data, Data)
+//        var txn : OpaquePointer
+//        var cursor: OpaquePointer
+//        var key : MDB_val
+//        var data : MDB_val
+//        var upperBound : Data?
+//        var inclusive : Bool
+//        var rc: Int32
+//
+//        init?(txn : OpaquePointer, cursor: OpaquePointer, lowerBound: DataEncodable? = nil, upperBound: DataEncodable? = nil, inclusive: Bool = false) {
+//            self.txn = txn
+//            self.cursor = cursor
+//            self.key = MDB_val(mv_size: 0, mv_data: nil)
+//            self.data = MDB_val(mv_size: 0, mv_data: nil)
+//            self.upperBound = nil
+//            self.inclusive = inclusive
+//            self.rc = 0
+//            
+//            var lower: Data? = nil
+//            do {
+//                self.upperBound = try upperBound?.asData()
+//                lower = try lowerBound?.asData()
+//                
+//                if let lower = lower {
+//                    
+//                    lower.withUnsafeBytes { (lowerPtr) in
+//                        self.key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
+//                    }
+//                    self.rc = mdb_cursor_get(cursor, &self.key, &self.data, MDB_SET_RANGE)
+//                } else {
+//                    self.rc = mdb_cursor_get(cursor, &self.key, &self.data, MDB_FIRST)
+//                }
+//            } catch {
+//                return nil
+//            }
+//        }
+//
+//        deinit {
+//            let txid = mdb_txn_id(txn)
+//            mdb_cursor_close(cursor)
+//            mdb_txn_commit(txn)
 //            print("COMMIT \(txid)")
-        }
-
-        public func next() -> (OpaquePointer, Data, Data)? {
-            guard self.rc == 0 else {
-                return nil
-            }
-            let keyData = Data(bytes: key.mv_data, count: key.mv_size)
-            let valueData = Data(bytes: data.mv_data, count: data.mv_size)
-            let pair = (txn, keyData, valueData)
-            defer {
-                self.rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
-            }
-            if let upper = self.upperBound {
-                let stop = upper.withUnsafeBytes { (upperPtr) -> Bool in
-                    var upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
-                    let cmp = mdb_cmp(txn, mdb_cursor_dbi(self.cursor), &self.key, &upperBound)
-                    if (cmp > 0) {
-                        return true
-                    }
-                    return false
-                }
-                if stop {
-                    return nil
-                }
-                return pair
-            } else {
-                return pair
-            }
-        }
-    }
+//            
+//            let env = mdb_txn_env(txn)
+//            var cleared: Int32 = 0
+//            let rc = mdb_reader_check(env, &cleared)
+//            if rc == 0 {
+//                print("mdb_reader_check cleared \(cleared) slots")
+//            } else {
+//                print("mdb_reader_check returned \(rc)")
+//            }
+//        }
+//
+//        public func next() -> (OpaquePointer, Data, Data)? {
+//            guard self.rc == 0 else {
+//                return nil
+//            }
+//            let keyData = Data(bytes: key.mv_data, count: key.mv_size)
+//            let valueData = Data(bytes: data.mv_data, count: data.mv_size)
+//            let pair = (txn, keyData, valueData)
+//            defer {
+//                self.rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+//            }
+//            if let upper = self.upperBound {
+//                let stop = upper.withUnsafeBytes { (upperPtr) -> Bool in
+//                    var upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
+//                    let cmp = mdb_cmp(txn, mdb_cursor_dbi(self.cursor), &self.key, &upperBound)
+//                    if (cmp > 0) {
+//                        return true
+//                    }
+//                    return false
+//                }
+//                if stop {
+//                    return nil
+//                }
+//                return pair
+//            } else {
+//                return pair
+//            }
+//        }
+//    }
     
     public class Database: CustomStringConvertible {
         public typealias Iterator = AnyIterator<(Data, Data)>
@@ -318,73 +328,74 @@ public class Environment {
         }
         
         public func iterator<T>(handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
-            var _txn : OpaquePointer? = nil
-            var rc = mdb_txn_begin(self.env.env, nil, UInt32(MDB_RDONLY), &_txn)
-            guard rc == 0 else {
-                throw DiomedeError.transactionError(rc)
-            }
-            
-            guard let txn = _txn else {
-                throw DiomedeError.transactionError(0)
-            }
-            
-            let txid = mdb_txn_id(txn)
-//            print("BEGIN \(txid)")
-
-            var cursor: OpaquePointer?
-            rc = mdb_cursor_open(txn, dbi, &cursor)
-            guard (rc == 0) else {
-                mdb_txn_abort(txn)
-                throw DiomedeError.cursorOpenError(rc)
-            }
-            
-            if let cursor = cursor, let c = Cursor(txn: txn, cursor: cursor) {
-                return AnyIterator {
-                    guard let (txn, k, v) = c.next() else {
-                        return nil
-                    }
-                    return handler(txn, k, v)
+            var results = [T]()
+            try self.env.read { (txn) throws -> Int in
+                var cursor: OpaquePointer?
+                var rc = mdb_cursor_open(txn, self.dbi, &cursor)
+                guard (rc == 0) else {
+                    throw DiomedeError.cursorOpenError(rc)
                 }
-            } else {
-                mdb_cursor_close(cursor)
-                mdb_txn_abort(txn)
-                return AnyIterator([].makeIterator())
+
+                var key = MDB_val(mv_size: 0, mv_data: nil)
+                var data = MDB_val(mv_size: 0, mv_data: nil)
+                rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
+                while (rc == 0) {
+                    let keyData = Data(bytes: key.mv_data, count: key.mv_size)
+                    let valueData = Data(bytes: data.mv_data, count: data.mv_size)
+                    defer {
+                        rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                    }
+                    let element = handler(txn, keyData, valueData)
+                    results.append(element)
+                }
+                return 0
             }
+
+            return AnyIterator(results.makeIterator())
         }
         
         public func iterator<T>(between lower: Data, and upper: Data, inclusive: Bool = false, handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
-            var _txn : OpaquePointer?
-            var rc = mdb_txn_begin(self.env.env, nil, UInt32(MDB_RDONLY), &_txn)
-            guard rc == 0 else {
-                throw DiomedeError.transactionError(rc)
-            }
-
-            guard let txn = _txn else {
-                throw DiomedeError.transactionError(0)
-            }
-            
-            let txid = mdb_txn_id(txn)
-//            print("BEGIN \(txid)")
-            
-            var cursor: OpaquePointer?
-            rc = mdb_cursor_open(txn, dbi, &cursor)
-            guard (rc == 0) else {
-                mdb_txn_abort(txn)
-                throw DiomedeError.cursorOpenError(rc)
-            }
-            
-            if let cursor = cursor, let c = Cursor(txn: txn, cursor: cursor, lowerBound: lower, upperBound: upper, inclusive: inclusive) {
-                return AnyIterator {
-                    guard let (txn, k, v) = c.next() else {
-                        return nil
-                    }
-                    return handler(txn, k, v)
+            var results = [T]()
+            try self.env.read { (txn) throws -> Int in
+                var cursor: OpaquePointer?
+                var rc = mdb_cursor_open(txn, self.dbi, &cursor)
+                guard (rc == 0) else {
+                    throw DiomedeError.cursorOpenError(rc)
                 }
-            } else {
-                mdb_cursor_close(cursor)
-                mdb_txn_abort(txn)
-                return AnyIterator([].makeIterator())
+
+                var key = MDB_val(mv_size: 0, mv_data: nil)
+                var data = MDB_val(mv_size: 0, mv_data: nil)
+                var upperBound = upper
+                var inclusive = false
+                lower.withUnsafeBytes { (lowerPtr) in
+                    key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
+                }
+                rc = mdb_cursor_get(cursor, &key, &data, MDB_SET_RANGE)
+                while (rc == 0) {
+                    let keyData = Data(bytes: key.mv_data, count: key.mv_size)
+                    let valueData = Data(bytes: data.mv_data, count: data.mv_size)
+                    defer {
+                        rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                    }
+
+                    let stop = upper.withUnsafeBytes { (upperPtr) -> Bool in
+                        var upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
+                        let cmp = mdb_cmp(txn, mdb_cursor_dbi(cursor), &key, &upperBound)
+                        if (cmp > 0) {
+                            return true
+                        }
+                        return false
+                    }
+                    if stop {
+                        break
+                    }
+                    
+                    let element = handler(txn, keyData, valueData)
+                    results.append(element)
+                }
+                return 0
             }
+            return AnyIterator(results.makeIterator())
         }
         
         public func iterate(handler: (Data, Data) throws -> ()) throws {
