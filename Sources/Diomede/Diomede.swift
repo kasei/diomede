@@ -43,6 +43,14 @@ public class Environment {
             env = nil
             return nil
         }
+
+        var cleared: Int32 = 0
+        let rc = mdb_reader_check(env, &cleared)
+        if rc == 0 {
+//            print("mdb_reader_check cleared \(cleared) slots")
+        } else {
+            print("mdb_reader_check returned \(rc)")
+        }
     }
     
     deinit {
@@ -64,22 +72,22 @@ public class Environment {
         let rc = mdb_txn_begin(env, nil, flags, &txn)
         if (rc == 0) {
             let txid = mdb_txn_id(txn)
-            print("BEGIN \(txid)")
+//            print("BEGIN \(txid)")
             if let txn = txn {
                 do {
                     let r = try handler(txn)
                     if (r == 0) {
                         let read_only = (UInt32(MDB_RDONLY) & flags) != 0
                         if read_only {
-                            mdb_txn_abort(txn)
-                            print("ROLLBACK \(txid)")
+                            mdb_txn_commit(txn)
+//                            print("ROLLBACK \(txid)")
                         } else {
                             mdb_txn_commit(txn)
-                            print("COMMIT \(txid)")
+//                            print("COMMIT \(txid)")
                         }
                     } else {
                         mdb_txn_abort(txn)
-                        print("ROLLBACK \(txid)")
+//                        print("ROLLBACK \(txid)")
                     }
                 } catch let e {
                     mdb_txn_abort(txn)
