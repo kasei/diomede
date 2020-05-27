@@ -183,6 +183,19 @@ if op == "stats" {
     while let quad = quads.next() {
         print(quad)
     }
+} else if op == "triples" {
+    let line = args[2]
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let graph = Term(iri: line)
+    var qp = QuadPattern.all
+    qp.graph = .bound(graph)
+    
+    for q in try qs.quads(matching: qp) {
+        let t = q.triple
+        print(t)
+    }
 } else if op == "graphterms" {
     let line = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
