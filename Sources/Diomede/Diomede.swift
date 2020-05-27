@@ -362,6 +362,48 @@ public class Environment {
             return AnyIterator(results.makeIterator())
         }
         
+        public func count(between lower: Data, and upper: Data, inclusive: Bool = false) throws -> Int {
+            var count = 0
+            try self.env.read { (txn) throws -> Int in
+                var cursor: OpaquePointer?
+                var rc = mdb_cursor_open(txn, self.dbi, &cursor)
+                guard (rc == 0) else {
+                    throw DiomedeError.cursorOpenError(rc)
+                }
+
+                var key = MDB_val(mv_size: 0, mv_data: nil)
+                var data = MDB_val(mv_size: 0, mv_data: nil)
+                var upperBound = MDB_val(mv_size: 0, mv_data: nil)
+                upper.withUnsafeBytes { (upperPtr) in
+                    upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
+                }
+                
+                lower.withUnsafeBytes { (lowerPtr) in
+                    key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
+                }
+                rc = mdb_cursor_get(cursor, &key, &data, MDB_SET_RANGE)
+                while (rc == 0) {
+                    defer {
+                        rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                    }
+
+                    let cmp = mdb_cmp(txn, mdb_cursor_dbi(cursor), &key, &upperBound)
+                    if inclusive {
+                        if (cmp > 0) {
+                            break
+                        }
+                    } else {
+                        if (cmp >= 0) {
+                            break
+                        }
+                    }
+                    count += 1
+                }
+                return 0
+            }
+            return count
+        }
+        
         public func iterator<T>(between lower: Data, and upper: Data, inclusive: Bool = false, handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
             var results = [T]()
             try self.env.read { (txn) throws -> Int in
@@ -373,8 +415,10 @@ public class Environment {
 
                 var key = MDB_val(mv_size: 0, mv_data: nil)
                 var data = MDB_val(mv_size: 0, mv_data: nil)
-                var upperBound = upper
-                var inclusive = false
+                var upperBound = MDB_val(mv_size: 0, mv_data: nil)
+                upper.withUnsafeBytes { (upperPtr) in
+                    upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
+                }
                 lower.withUnsafeBytes { (lowerPtr) in
                     key = MDB_val(mv_size: lower.count, mv_data: UnsafeMutableRawPointer(mutating: lowerPtr.baseAddress))
                 }
@@ -387,10 +431,15 @@ public class Environment {
                     }
 
                     let stop = upper.withUnsafeBytes { (upperPtr) -> Bool in
-                        var upperBound = MDB_val(mv_size: upper.count, mv_data: UnsafeMutableRawPointer(mutating: upperPtr.baseAddress))
                         let cmp = mdb_cmp(txn, mdb_cursor_dbi(cursor), &key, &upperBound)
-                        if (cmp > 0) {
-                            return true
+                        if inclusive {
+                            if (cmp > 0) {
+                                return true
+                            }
+                        } else {
+                            if (cmp >= 0) {
+                                return true
+                            }
                         }
                         return false
                     }
