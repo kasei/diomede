@@ -49,7 +49,7 @@ if op == "create" {
 }
 
 guard let e = Environment(path: path) else {
-    fatalError()
+    fatalError("failed to open environment: \(path)")
 }
 
 let indexes = e.database(named: DiomedeQuadStore.StaticDatabases.fullIndexes.rawValue)!
@@ -99,6 +99,12 @@ if op == "stats" {
         let name = try String.fromData(k)
         print("  - \(name)")
     }
+    
+    let databases = Set(try e.databases())
+    if databases.contains("cs") {
+        print("  - Characteristic Sets")
+    }
+    
 //} else if op == "load" || op == "import" {
 //    let filename = args[2]
 //    let url = URL(fileURLWithPath: filename)
@@ -117,6 +123,17 @@ if op == "stats" {
 //
 //    let now = UInt64(Date().timeIntervalSince1970)
 //    try qs.load(version: now, quads: quads)
+//} else if op == "match" {
+//    let line = args[2]
+//    guard let qs = DiomedeQuadStore(path: path) else {
+//        fatalError("Failed to construct quadstore")
+//    }
+//    let p = NTriplesPatternParser(reader: "")
+//    guard let qp = p.parseQuadPattern(line: line) else {
+//        fatalError("Bad quad pattern")
+//    }
+//    let i = try qs.quads(matching: qp)
+//    printQuads(i)
 } else if op == "terms" {
     let i2t = e.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
     try i2t.iterate { (k, v) in
@@ -157,15 +174,21 @@ if op == "stats" {
         }
         return 0
     }
-    } else if op == "index" {
+} else if op == "index" {
     let name = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
-    guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
-        throw DiomedeError.indexError
+
+    if name == "cs" {
+        print("Generating Characteristic Sets")
+        try qs.computeCharacteristicSets()
+    } else {
+        guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
+            throw DiomedeError.indexError
+        }
+        try qs.addFullIndex(order: indexOrder)
     }
-    try qs.addFullIndex(order: indexOrder)
 } else if op == "dropindex" {
     let name = args[2]
     guard var qs = DiomedeQuadStore(path: path) else {
@@ -175,14 +198,6 @@ if op == "stats" {
         throw DiomedeError.indexError
     }
     try qs.dropFullIndex(order: indexOrder)
-} else if op == "stream" {
-    guard let qs = DiomedeQuadStore(path: path) else {
-        fatalError("Failed to construct quadstore")
-    }
-    let quads = try qs.quadsIterator()
-    while let quad = quads.next() {
-        print(quad)
-    }
 } else if op == "triples" {
     let line = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
@@ -196,15 +211,6 @@ if op == "stats" {
         let t = q.triple
         print(t)
     }
-} else if op == "graphterms" {
-    let line = args[2]
-    guard let qs = DiomedeQuadStore(path: path) else {
-        fatalError("Failed to construct quadstore")
-    }
-    let term = Term(iri: line)
-    for o in qs.graphTerms(in: term) {
-        print(o)
-    }
 } else if op == "quads" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
@@ -214,17 +220,15 @@ if op == "stats" {
     for q in i {
         print(q)
     }
-//} else if op == "match" {
-//    let line = args[2]
-//    guard let qs = DiomedeQuadStore(path: path) else {
-//        fatalError("Failed to construct quadstore")
-//    }
-//    let p = NTriplesPatternParser(reader: "")
-//    guard let qp = p.parseQuadPattern(line: line) else {
-//        fatalError("Bad quad pattern")
-//    }
-//    let i = try qs.quads(matching: qp)
-//    printQuads(i)
+} else if op == "graphterms" {
+    let line = args[2]
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+    let term = Term(iri: line)
+    for o in qs.graphTerms(in: term) {
+        print(o)
+    }
 } else if op == "graphs" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
@@ -266,4 +270,26 @@ if op == "stats" {
         }
         return 0
     }
+} else if op == "cs" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        fatalError("Failed to construct quadstore")
+    }
+
+    let graph = Array(qs.graphs()).first!
+    guard let sets = try qs.characteristicSets(for: graph) else {
+        fatalError("No characteristic sets index found")
+    }
+
+    var t1 = TriplePattern.all
+    t1.predicate = .bound(Term.rdf("type"))
+    t1.object = .bound(Term(iri: "http://xmlns.com/foaf/0.1/Person"))
+
+    var t2 = TriplePattern.all
+    t2.predicate = .bound(Term(iri: "http://xmlns.com/foaf/0.1/nick"))
+    
+//    let c1 = try sets.starCardinality(matching: [t1], in: graph, store: qs)
+//    print("[t1] Cardinality: \(c1)")
+    
+    let c2 = try sets.starCardinality(matching: [t1, t2], in: graph, store: qs)
+    print("[t1] Cardinality: \(c2)")
 }

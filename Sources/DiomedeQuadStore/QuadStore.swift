@@ -172,15 +172,24 @@ public struct DiomedeQuadStore {
         }
     }
 
-    private func read(handler: (OpaquePointer) throws -> Int) throws {
+    func read(handler: (OpaquePointer) throws -> Int) throws {
         try self.env.read(handler: handler)
     }
 
-    private func write(handler: (OpaquePointer) throws -> Int) throws {
+    func write(handler: (OpaquePointer) throws -> Int) throws {
         try self.env.write(handler: handler)
     }
 
-    private func bestIndex(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
+    func bestIndex(matchingBoundPositions positions: Set<Int>) throws -> IndexOrder? {
+        var order: IndexOrder? = nil
+        try self.env.read { (txn) -> Int in
+            order = try self.bestIndex(matchingBoundPositions: positions, txn: txn)
+            return 0
+        }
+        return order
+    }
+    
+    func bestIndex(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
         let bound = matchingBoundPositions
         var scores = [(Int, IndexOrder)]()
         for (k, v) in self.fullIndexes {
@@ -204,7 +213,7 @@ public struct DiomedeQuadStore {
         return indexOrder
     }
 
-    private func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
+    func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
         guard let (index, order) = self.fullIndexes[indexOrder] else {
             throw DiomedeError.indexError
         }
@@ -212,25 +221,39 @@ public struct DiomedeQuadStore {
         let empty = Array(repeating: 0, count: 4)
         let lower = Array((prefix + empty).prefix(4))
         var upper = lower
-        upper[prefix.count - 1] += 1
-        
-        let lowerKey = lower.asData()
-        let upperKey = upper.asData()
-        //        print("from \(lowerKey._hexValue)")
-        //        print("to   \(upperKey._hexValue)")
-        
-        var quadIds = [[Int]]()
-        try index.iterate(between: lowerKey, and: upperKey) { (qidsData, _) in
-            var tids = Array<Int>(repeating: 0, count: 4)
-            let strideBy = qidsData.count / 4
-            for (pos, i) in zip(order, stride(from: 0, to: qidsData.count, by: strideBy)) {
-                let data = qidsData[i..<(i+strideBy)]
-                let tid = Int.fromData(data)
-                tids[pos] = tid
+        if prefix.isEmpty {
+            var quadIds = [[Int]]()
+            try index.iterate { (qidsData, _) in
+                var tids = Array<Int>(repeating: 0, count: 4)
+                let strideBy = qidsData.count / 4
+                for (pos, i) in zip(order, stride(from: 0, to: qidsData.count, by: strideBy)) {
+                    let data = qidsData[i..<(i+strideBy)]
+                    let tid = Int.fromData(data)
+                    tids[pos] = tid
+                }
+                quadIds.append(tids)
             }
-            quadIds.append(tids)
+            return quadIds
+        } else {
+            upper[prefix.count - 1] += 1
+            let lowerKey = lower.asData()
+            let upperKey = upper.asData()
+            //        print("from \(lowerKey._hexValue)")
+            //        print("to   \(upperKey._hexValue)")
+            
+            var quadIds = [[Int]]()
+            try index.iterate(between: lowerKey, and: upperKey) { (qidsData, _) in
+                var tids = Array<Int>(repeating: 0, count: 4)
+                let strideBy = qidsData.count / 4
+                for (pos, i) in zip(order, stride(from: 0, to: qidsData.count, by: strideBy)) {
+                    let data = qidsData[i..<(i+strideBy)]
+                    let tid = Int.fromData(data)
+                    tids[pos] = tid
+                }
+                quadIds.append(tids)
+            }
+            return quadIds
         }
-        return quadIds
     }
     
     private func iterateQuadIds(txn: OpaquePointer, usingIndex indexOrder: IndexOrder? = nil, handler: (Int, [Int]) throws -> ()) throws {
@@ -326,8 +349,8 @@ public struct DiomedeQuadStore {
             }
         }
     }
-
-    private func id(for term: Term, txn: OpaquePointer) throws -> Int? {
+    
+    func id(for term: Term, txn: OpaquePointer) throws -> Int? {
         let d = try term.asData()
         let term_key = Data(SHA256.hash(data: d))
         if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
@@ -335,6 +358,19 @@ public struct DiomedeQuadStore {
         } else {
             return nil
         }
+    }
+    
+    func id(for term: Term) throws -> Int? {
+        let d = try term.asData()
+        let term_key = Data(SHA256.hash(data: d))
+        var id : Int? = nil
+        try self.env.read { (txn) -> Int in
+            if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
+                id = Int.fromData(eid)
+            }
+            return 0
+        }
+        return id
     }
 }
 
@@ -438,7 +474,7 @@ extension DiomedeQuadStore {
         return AnyIterator(quads.makeIterator())
     }
     
-    private func termIterator(fromIds ids: [Int]) -> AnyIterator<Term> {
+    func termIterator(fromIds ids: [Int]) -> AnyIterator<Term> {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         let chunkSize = 1024
 
@@ -562,15 +598,19 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: Array(termIds))
     }
 
-    public func quads(matching pattern: QuadPattern) throws -> AnyIterator<Quad> {
+    func quadIds(matching pattern: QuadPattern) throws -> [[Int]] {
+//        print("matching: \(pattern)")
         var bestIndex: IndexOrder? = nil
         var prefix = [Int]()
+        var restrictions = [Int: Int]()
         do {
             try self.env.read { (txn) -> Int in
                 var boundPositions = Set<Int>()
                 for (i, n) in pattern.enumerated() {
-                    if case .bound(_) = n {
+                    if case .bound(let term) = n {
                         boundPositions.insert(i)
+                        
+                        restrictions[i] = try self.id(for: term, txn: txn)
                     }
                 }
                 if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
@@ -593,30 +633,39 @@ extension DiomedeQuadStore {
                 return 0
             }
         } catch DiomedeError.nonExistentTermError {
-            return AnyIterator([].makeIterator())
+            return []
         }
         
         if let index = bestIndex {
-            if prefix.isEmpty {
-//                print("matching all quads")
-                let i = try self.quadsIterator()
-                let s = AnySequence(i)
-                let matching = s.lazy.filter { pattern.matches($0) }
-                return AnyIterator(matching.makeIterator())
-            } else {
-//                print("matching quads with prefix: \(prefix)")
-                let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
-                let i = self.quadsIterator(fromIds: quadIds)
-                let s = AnySequence(i)
-                let matching = s.lazy.filter { pattern.matches($0) }
-                return AnyIterator(matching.makeIterator())
+//            print("using index \(index.rawValue)")
+            let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
+            return quadIds.filter { (tids) -> Bool in
+                for (i, value) in restrictions {
+                    if tids[i] != value {
+                        return false
+                    }
+                }
+                return true
             }
         } else {
-            let i = try self.quadsIterator()
-            let s = AnySequence(i)
-            let matching = s.lazy.filter { pattern.matches($0) }
-            return AnyIterator(matching.makeIterator())
+            var quadIds = [[Int]]()
+            try self.quads_db.iterate { (_, spog) in
+                let tids = [Int].fromData(spog)
+                for (i, value) in restrictions {
+                    if tids[i] != value {
+                        return
+                    }
+                }
+                quadIds.append(tids)
+            }
+            return quadIds
         }
+    }
+
+    public func quads(matching pattern: QuadPattern) throws -> AnyIterator<Quad> {
+        let quadIds = try self.quadIds(matching: pattern)
+        let i = self.quadsIterator(fromIds: quadIds)
+        return AnyIterator(i.makeIterator())
     }
 }
 
@@ -821,11 +870,67 @@ extension DiomedeQuadStore {
 //    }
 
     public func countQuads(matching pattern: QuadPattern) throws -> Int {
-        var count = 0
-        for _ in try self.quads(matching: pattern) {
-            count += 1
+        var bestIndex: IndexOrder? = nil
+        var prefix = [Int]()
+        var restrictions = [Int: Int]()
+        var boundPositions = Set<Int>()
+        do {
+            try self.env.read { (txn) -> Int in
+                for (i, n) in pattern.enumerated() {
+                    if case .bound(let term) = n {
+                        boundPositions.insert(i)
+                        
+                        restrictions[i] = try self.id(for: term, txn: txn)
+                    }
+                }
+                if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
+                    bestIndex = index
+                    //                print("Best index order is \(index.rawValue)")
+                    let order = index.order()
+                    let nodes = Array(pattern)
+                    
+                    for i in order {
+                        let node = nodes[i]
+                        guard case .bound(let term) = node else {
+                            break
+                        }
+                        guard let tid = try self.id(for: term, txn: txn) else {
+                            throw DiomedeError.nonExistentTermError
+                        }
+                        prefix.append(tid)
+                    }
+                }
+                return 0
+            }
+        } catch DiomedeError.nonExistentTermError {
+            return 0
         }
-        return count
+        
+        if let indexOrder = bestIndex, prefix.count == boundPositions.count {
+            // index completely covers the bound terms; matching on this index will give a precise count
+            //            print("using index \(index.rawValue)")
+//            print("using optimized count on index \(indexOrder.rawValue): \(pattern)")
+            guard let (index, _) = self.fullIndexes[indexOrder] else {
+                throw DiomedeError.indexError
+            }
+            let empty = Array(repeating: 0, count: 4)
+            let lower = Array((prefix + empty).prefix(4))
+            var upper = lower
+            upper[prefix.count - 1] += 1
+            let lowerKey = lower.asData()
+            let upperKey = upper.asData()
+            let count = try index.count(between: lowerKey, and: upperKey, inclusive: false)
+//            print("-> \(count)")
+            return count
+        } else {
+//            print("using non-optimized count for: \(pattern)")
+            var count = 0
+            for _ in try self.quadIds(matching: pattern) {
+                count += 1
+            }
+//            print("-> \(count)")
+            return count
+        }
     }
     
     
