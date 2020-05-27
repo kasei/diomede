@@ -564,11 +564,11 @@ extension DiomedeQuadStore {
                 let cache = LRUCache<Int, Term>(capacity: 4_096)
                 let i = try self.quadIdsIterator(usingIndex: index, withPrefix: prefix) { (txn, qid, tids) -> Quad? in
                     do {
-                        let quad = try self.quad(from: tids, txn: txn, cache: cache)
-                        return quad
-                    } catch {
-                        return nil
-                    }
+                        if let quad = try self.quad(from: tids, txn: txn, cache: cache), pattern.matches(quad) {
+                            return quad
+                        }
+                    } catch {}
+                    return nil
                 }
                 return AnyIterator(i.lazy.compactMap { $0 }.makeIterator())
             }
@@ -723,7 +723,8 @@ extension DiomedeQuadStore {
     public func graphs() -> AnyIterator<Term> {
         do {
             return try self.namedGraphs()
-        } catch {
+        } catch let e {
+            print("*** Failed to access named graphs: \(e)")
             return AnyIterator([].makeIterator())
         }
     }

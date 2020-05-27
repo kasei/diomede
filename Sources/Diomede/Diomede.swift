@@ -193,6 +193,8 @@ public class Environment {
         }
 
         deinit {
+            let txid = mdb_txn_id(txn)
+            print("COMMIT \(txid)")
             mdb_cursor_close(cursor)
             mdb_txn_commit(txn)
         }
@@ -329,10 +331,13 @@ public class Environment {
             guard rc == 0 else {
                 throw DiomedeError.transactionError(rc)
             }
-            
+
             guard let txn = _txn else {
                 throw DiomedeError.transactionError(0)
             }
+            
+            let txid = mdb_txn_id(_txn)
+            print("BEGIN \(txid)")
             
             var cursor: OpaquePointer?
             rc = mdb_cursor_open(txn, dbi, &cursor)
