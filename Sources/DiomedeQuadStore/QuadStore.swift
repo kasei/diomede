@@ -542,7 +542,7 @@ extension DiomedeQuadStore {
             return 0
         }
 
-        print("finding graph terms for gid \(gid)")
+//        print("finding graph terms for gid \(gid)")
 
         var quadIds = [[Int]]()
         try self.quads_db.iterate(handler: { (_, value) in
@@ -598,15 +598,18 @@ extension DiomedeQuadStore {
         
         if let index = bestIndex {
             if prefix.isEmpty {
-                print("matching all quads")
+//                print("matching all quads")
                 let i = try self.quadsIterator()
                 let s = AnySequence(i)
                 let matching = s.lazy.filter { pattern.matches($0) }
                 return AnyIterator(matching.makeIterator())
             } else {
-                print("matching quads with prefix: \(prefix)")
+//                print("matching quads with prefix: \(prefix)")
                 let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
-                return self.quadsIterator(fromIds: quadIds)
+                let i = self.quadsIterator(fromIds: quadIds)
+                let s = AnySequence(i)
+                let matching = s.lazy.filter { pattern.matches($0) }
+                return AnyIterator(matching.makeIterator())
             }
         } else {
             let i = try self.quadsIterator()
