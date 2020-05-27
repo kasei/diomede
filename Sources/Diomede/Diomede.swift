@@ -19,29 +19,35 @@ public class Environment {
     var env : OpaquePointer?
     
     public init?(path: String) {
+        env = nil
         if (mdb_env_create(&env) != 0) {
             return nil
         }
         
         if (mdb_env_set_mapsize(env, 8192000000) != 0) {
             mdb_env_close(env)
+            env = nil
             return nil
         }
         
         if (mdb_env_set_maxdbs(env, 256) != 0) {
             mdb_env_close(env)
+            env = nil
             return nil
         }
         
         
-        if (mdb_env_open(env, path, UInt32(MDB_NOSYNC), 0o0640) != 0) {
+        if (mdb_env_open(env, path, UInt32(MDB_NOTLS | MDB_NOSYNC), 0o0640) != 0) {
             mdb_env_close(env)
+            env = nil
             return nil
         }
     }
     
     deinit {
-        mdb_env_close(env)
+        if env != nil {
+            mdb_env_close(env)
+        }
     }
     
     public func read(handler: (OpaquePointer) throws -> Int) throws {
@@ -53,32 +59,43 @@ public class Environment {
     }
     
     private func run(flags: UInt32, handler: (OpaquePointer) throws -> Int) rethrows {
-        var txn : OpaquePointer?
-        if (mdb_txn_begin(env, nil, flags, &txn) == 0) {
+        var txn : OpaquePointer? = nil
+        let rc = mdb_txn_begin(env, nil, flags, &txn)
+        if (rc == 0) {
             let txid = mdb_txn_id(txn)
-            print("BEGIN \(txid)")
+//            print("BEGIN \(txid)")
             if let txn = txn {
                 do {
                     let r = try handler(txn)
                     if (r == 0) {
-                        mdb_txn_commit(txn)
-                        print("COMMIT \(txid)")
+                        let read_only = (UInt32(MDB_RDONLY) & flags) != 0
+                        if read_only {
+                            mdb_txn_abort(txn)
+//                            print("ROLLBACK \(txid)")
+                        } else {
+                            mdb_txn_commit(txn)
+//                            print("COMMIT \(txid)")
+                        }
                     } else {
                         mdb_txn_abort(txn)
-                        print("ROLLBACK \(txid)")
+//                        print("ROLLBACK \(txid)")
                     }
                 } catch let e {
                     mdb_txn_abort(txn)
                     throw e
                 }
+            } else {
+                fatalError()
             }
+        } else {
+            print("mdb_txn_begin returned \(rc)")
         }
     }
     
     public func databases() throws -> [String] {
         var names = [String]()
         try self.read { (txn) throws -> Int in
-            print("databases() read")
+//            print("databases() read")
             var dbi: MDB_dbi = 0
             let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
                 if (mdb_dbi_open(txn, nil, 0, dbip) != 0) {
@@ -99,7 +116,6 @@ public class Environment {
             guard (rc == 0) else {
                 throw DiomedeError.cursorOpenError(rc)
             }
-            defer { mdb_cursor_close(cursor) }
 
             var op = MDB_FIRST
             while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
@@ -109,6 +125,7 @@ public class Environment {
                     names.append(name)
                 }
             }
+            mdb_cursor_close(cursor)
             return 0
         }
         return names
@@ -198,9 +215,9 @@ public class Environment {
 
         deinit {
             let txid = mdb_txn_id(txn)
-            print("COMMIT \(txid)")
             mdb_cursor_close(cursor)
             mdb_txn_commit(txn)
+//            print("COMMIT \(txid)")
         }
 
         public func next() -> (OpaquePointer, Data, Data)? {
@@ -301,7 +318,7 @@ public class Environment {
         }
         
         public func iterator<T>(handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
-            var _txn : OpaquePointer?
+            var _txn : OpaquePointer? = nil
             var rc = mdb_txn_begin(self.env.env, nil, UInt32(MDB_RDONLY), &_txn)
             guard rc == 0 else {
                 throw DiomedeError.transactionError(rc)
@@ -312,11 +329,12 @@ public class Environment {
             }
             
             let txid = mdb_txn_id(txn)
-            print("BEGIN \(txid)")
+//            print("BEGIN \(txid)")
 
             var cursor: OpaquePointer?
             rc = mdb_cursor_open(txn, dbi, &cursor)
             guard (rc == 0) else {
+                mdb_txn_abort(txn)
                 throw DiomedeError.cursorOpenError(rc)
             }
             
@@ -328,6 +346,8 @@ public class Environment {
                     return handler(txn, k, v)
                 }
             } else {
+                mdb_cursor_close(cursor)
+                mdb_txn_abort(txn)
                 return AnyIterator([].makeIterator())
             }
         }
@@ -344,11 +364,12 @@ public class Environment {
             }
             
             let txid = mdb_txn_id(txn)
-            print("BEGIN \(txid)")
+//            print("BEGIN \(txid)")
             
             var cursor: OpaquePointer?
             rc = mdb_cursor_open(txn, dbi, &cursor)
             guard (rc == 0) else {
+                mdb_txn_abort(txn)
                 throw DiomedeError.cursorOpenError(rc)
             }
             
@@ -360,6 +381,8 @@ public class Environment {
                     return handler(txn, k, v)
                 }
             } else {
+                mdb_cursor_close(cursor)
+                mdb_txn_abort(txn)
                 return AnyIterator([].makeIterator())
             }
         }
@@ -400,7 +423,7 @@ public class Environment {
         }
         
         public func iterate(between lower: Data, and upper: Data, handler: (Data, Data) throws -> ()) throws {
-            print("pipelined iteration")
+//            print("pipelined iteration")
             let i = try self.iterator(between: lower, and: upper, inclusive: false) { ($1, $2) }
             let c = AnySequence { return i }
             for (k, v) in c {

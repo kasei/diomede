@@ -111,7 +111,8 @@ public struct DiomedeQuadStore {
                 }
                 return 0
             }
-        } catch {
+        } catch let e {
+            print("*** Environment.init: \(e)")
             return nil
         }
     }
@@ -159,7 +160,7 @@ public struct DiomedeQuadStore {
                 
                 self.init(environment: e)
             } catch let e {
-                print("error: \(e)")
+                print("*** Environment.init: \(e)")
                 return nil
             }
         } else {
