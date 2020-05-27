@@ -55,13 +55,17 @@ public class Environment {
     private func run(flags: UInt32, handler: (OpaquePointer) throws -> Int) rethrows {
         var txn : OpaquePointer?
         if (mdb_txn_begin(env, nil, flags, &txn) == 0) {
+            let txid = mdb_txn_id(txn)
+            print("BEGIN \(txid)")
             if let txn = txn {
                 do {
                     let r = try handler(txn)
                     if (r == 0) {
                         mdb_txn_commit(txn)
+                        print("COMMIT \(txid)")
                     } else {
                         mdb_txn_abort(txn)
+                        print("ROLLBACK \(txid)")
                     }
                 } catch let e {
                     mdb_txn_abort(txn)
@@ -307,6 +311,9 @@ public class Environment {
                 throw DiomedeError.transactionError(0)
             }
             
+            let txid = mdb_txn_id(txn)
+            print("BEGIN \(txid)")
+
             var cursor: OpaquePointer?
             rc = mdb_cursor_open(txn, dbi, &cursor)
             guard (rc == 0) else {
@@ -336,7 +343,7 @@ public class Environment {
                 throw DiomedeError.transactionError(0)
             }
             
-            let txid = mdb_txn_id(_txn)
+            let txid = mdb_txn_id(txn)
             print("BEGIN \(txid)")
             
             var cursor: OpaquePointer?
