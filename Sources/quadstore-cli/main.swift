@@ -4,7 +4,6 @@ import CryptoKit
 import Diomede
 import DiomedeQuadStore
 import SPARQLSyntax
-import Kineo
 
 let args = Array(CommandLine.arguments.dropFirst())
 let cmd = CommandLine.arguments[0]
@@ -15,28 +14,28 @@ guard args.count >= 2 else {
 }
 
 
-struct Stdout: TextOutputStream {
-  internal init() {}
-
-  internal mutating func write(_ string: String) {
-    if string.isEmpty { return }
-    var string = string
-    _ = string.withUTF8 { utf8 in
-        fwrite(utf8.baseAddress!, 1, utf8.count, stdout)
-    }
-  }
-}
-
-func printQuads(_ iter: AnyIterator<Quad>) {
-    var out = Stdout()
-    let seq = AnySequence(iter)
-    for q in seq {
-        for t in q {
-            t.printNTriplesString(to: &out)
-        }
-        print(" .")
-    }
-}
+//struct Stdout: TextOutputStream {
+//  internal init() {}
+//
+//  internal mutating func write(_ string: String) {
+//    if string.isEmpty { return }
+//    var string = string
+//    _ = string.withUTF8 { utf8 in
+//        fwrite(utf8.baseAddress!, 1, utf8.count, stdout)
+//    }
+//  }
+//}
+//
+//func printQuads(_ iter: AnyIterator<Quad>) {
+//    var out = Stdout()
+//    let seq = AnySequence(iter)
+//    for q in seq {
+//        for t in q {
+//            t.printNTriplesString(to: &out)
+//        }
+//        print(" .")
+//    }
+//}
 
 let path = args[0]
 let op = args[1]
@@ -100,24 +99,24 @@ if op == "stats" {
         let name = try String.fromData(k)
         print("  - \(name)")
     }
-} else if op == "load" || op == "import" {
-    let filename = args[2]
-    let url = URL(fileURLWithPath: filename)
-    guard let qs = DiomedeQuadStore(path: path) else {
-        fatalError("Failed to construct quadstore")
-    }
-    
-    
-    let parser = RDFParserCombined()
-    let graph = Term(iri: url.absoluteString)
-    var quads = [Quad]()
-    try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
-        let q = Quad(subject: s, predicate: p, object: o, graph: graph)
-        quads.append(q)
-    }
-    
-    let now = UInt64(Date().timeIntervalSince1970)
-    try qs.load(version: now, quads: quads)
+//} else if op == "load" || op == "import" {
+//    let filename = args[2]
+//    let url = URL(fileURLWithPath: filename)
+//    guard let qs = DiomedeQuadStore(path: path) else {
+//        fatalError("Failed to construct quadstore")
+//    }
+//
+//
+//    let parser = RDFParserCombined()
+//    let graph = Term(iri: url.absoluteString)
+//    var quads = [Quad]()
+//    try parser.parse(file: url.path, base: graph.value) { (s, p, o) in
+//        let q = Quad(subject: s, predicate: p, object: o, graph: graph)
+//        quads.append(q)
+//    }
+//
+//    let now = UInt64(Date().timeIntervalSince1970)
+//    try qs.load(version: now, quads: quads)
 } else if op == "terms" {
     let i2t = e.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
     try i2t.iterate { (k, v) in
@@ -189,11 +188,7 @@ if op == "stats" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
-    let p = NTriplesPatternParser(reader: "")
-    guard let node = p.parseNode(line: line), case .bound(let term) = node else {
-        fatalError("Bad graph name")
-    }
-    
+    let term = Term(iri: line)
     for o in qs.graphTerms(in: term) {
         print(o)
     }
@@ -203,31 +198,20 @@ if op == "stats" {
     }
     let qp = QuadPattern.all
     let i = try qs.quads(matching: qp)
-    printQuads(i)
-} else if op == "matchloop" {
-    let line = args[2]
-    while true {
-        guard let qs = DiomedeQuadStore(path: path) else {
-            fatalError("Failed to construct quadstore")
-        }
-        let p = NTriplesPatternParser(reader: "")
-        guard let qp = p.parseQuadPattern(line: line) else {
-            fatalError("Bad quad pattern")
-        }
-        let i = try qs.quads(matching: qp)
-        printQuads(i)
+    for q in i {
+        print(q)
     }
-} else if op == "match" {
-    let line = args[2]
-    guard let qs = DiomedeQuadStore(path: path) else {
-        fatalError("Failed to construct quadstore")
-    }
-    let p = NTriplesPatternParser(reader: "")
-    guard let qp = p.parseQuadPattern(line: line) else {
-        fatalError("Bad quad pattern")
-    }
-    let i = try qs.quads(matching: qp)
-    printQuads(i)
+//} else if op == "match" {
+//    let line = args[2]
+//    guard let qs = DiomedeQuadStore(path: path) else {
+//        fatalError("Failed to construct quadstore")
+//    }
+//    let p = NTriplesPatternParser(reader: "")
+//    guard let qp = p.parseQuadPattern(line: line) else {
+//        fatalError("Bad quad pattern")
+//    }
+//    let i = try qs.quads(matching: qp)
+//    printQuads(i)
 } else if op == "graphs" {
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")

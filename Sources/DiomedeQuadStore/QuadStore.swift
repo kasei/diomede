@@ -10,7 +10,6 @@ import CryptoKit
 
 import SPARQLSyntax
 import Diomede
-import Kineo
 
 public struct DiomedeQuadStore {
     public enum IndexOrder: String {
@@ -689,7 +688,16 @@ extension DiomedeQuadStore {
     }
 }
 
-extension DiomedeQuadStore: QuadStoreProtocol {
+extension DiomedeQuadStore {
+    // These allow DiomedeQuadStore to conform to QuadStoreProtocol,
+    // with the exception of results(matching:) which depends on the Kineo-specific TermResult type.
+    // It can be trivially wrapped around bindings(matching:).
+    
+    public typealias Version = UInt64
+    public func effectiveVersion() throws -> Version? {
+        return try effectiveVersion(matching: QuadPattern.all)
+    }
+    
     public func effectiveVersion(matching pattern: QuadPattern) throws -> Version? {
         let f = ISO8601DateFormatter()
         if let d = try self.stats_db.get(key: "Last-Modified") {
@@ -736,7 +744,7 @@ extension DiomedeQuadStore: QuadStoreProtocol {
         }
     }
     
-    public func results(matching pattern: QuadPattern) throws -> AnyIterator<TermResult> {
+    public func bindings(matching pattern: QuadPattern) throws -> AnyIterator<[String:Term]> {
         var bindings : [String: KeyPath<Quad, Term>] = [:]
         for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
             if case .variable(let name, binding: true) = node {
@@ -744,16 +752,34 @@ extension DiomedeQuadStore: QuadStoreProtocol {
             }
         }
         let quads = try self.quads(matching: pattern)
-        let results = quads.lazy.map { (q) -> TermResult in
+        let results = quads.lazy.map { (q) -> [String:Term] in
             var b = [String: Term]()
             for (name, path) in bindings {
                 b[name] = q[keyPath: path]
             }
-            return TermResult(bindings: b)
+            return b
         }
         return AnyIterator(results.makeIterator())
     }
     
+//    public func results(matching pattern: QuadPattern) throws -> AnyIterator<TermResult> {
+//        var bindings : [String: KeyPath<Quad, Term>] = [:]
+//        for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
+//            if case .variable(let name, binding: true) = node {
+//                bindings[name] = path
+//            }
+//        }
+//        let quads = try self.quads(matching: pattern)
+//        let results = quads.lazy.map { (q) -> TermResult in
+//            var b = [String: Term]()
+//            for (name, path) in bindings {
+//                b[name] = q[keyPath: path]
+//            }
+//            return TermResult(bindings: b)
+//        }
+//        return AnyIterator(results.makeIterator())
+//    }
+
     public func countQuads(matching pattern: QuadPattern) throws -> Int {
         var count = 0
         for _ in try self.quads(matching: pattern) {
@@ -765,7 +791,8 @@ extension DiomedeQuadStore: QuadStoreProtocol {
     
 }
 
-extension DiomedeQuadStore: MutableQuadStoreProtocol {
+extension DiomedeQuadStore {
+    // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
         try env_db.write { (txn) -> Int in
             let cache = LRUCache<Term, Int>(capacity: 4_096)
