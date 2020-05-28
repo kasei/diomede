@@ -302,7 +302,7 @@ extension CharacteristicDataSet: CustomDebugStringConvertible {
 
 extension DiomedeQuadStore {
     public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet? {
-        let indexName = "cs"
+        let indexName = "characteristicSets"
         
         guard let index = self.env.database(named: indexName) else {
             return nil
@@ -356,7 +356,7 @@ extension DiomedeQuadStore {
             }
             
             try self.write { (txn) -> Int in
-                let indexName = "cs"
+                let indexName = "characteristicSets"
                 try self.env.createDatabase(txn: txn, named: indexName)
                 let index = self.env.database(txn: txn, named: indexName)!
                 try index.insert(txn: txn, uniqueKeysWithValues: pairs)

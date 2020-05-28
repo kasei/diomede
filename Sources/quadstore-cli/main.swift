@@ -77,7 +77,7 @@ if op == "stats" {
         print("Effective version: \(version)")
     }
     
-    for k in (["next_unassigned_id"]) {
+    for k in (["next_unassigned_term_id"]) {
         if let d = try stats.get(key: k) {
             let value = Int.fromData(d)
             print("\(k): \(value)")

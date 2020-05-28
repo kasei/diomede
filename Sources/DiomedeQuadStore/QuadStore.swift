@@ -152,8 +152,8 @@ public struct DiomedeQuadStore {
                         ("Last-Modified", now)
                     ])
                     try stats.insert(txn: txn, uniqueKeysWithValues: [
-                        ("next_unassigned_id", 1),
-                        ("next_quad_id", 1),
+                        ("next_unassigned_term_id", 1),
+                        ("next_unassigned_quad_id", 1),
                     ])
                     return 0
                 }
@@ -677,8 +677,8 @@ extension DiomedeQuadStore {
 //
 //        try env_db.write { (txn) -> Int in
 //            let cache = LRUCache<Term, Int>(capacity: 4_096)
-//            var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_id").map { Int.fromData($0) } ?? 1
-//            var next_quad_id = try stats_db.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
+//            var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_term_id").map { Int.fromData($0) } ?? 1
+//            var next_quad_id = try stats_db.get(txn: txn, key: "next_unassigned_quad_id").map { Int.fromData($0) } ?? 1
 //
 //            var graphIds = Set<Int>()
 //            var quadIds = [[Int]]()
@@ -721,7 +721,7 @@ extension DiomedeQuadStore {
 //            try self.graphs_db.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
 //
 //            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-//                ("next_unassigned_id", next_term_id),
+//                ("next_unassigned_term_id", next_term_id),
 //            ])
 //
 //            let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
@@ -735,7 +735,7 @@ extension DiomedeQuadStore {
 //            }
 //
 //            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-//                ("next_quad_id", next_quad_id),
+//                ("next_unassigned_quad_id", next_quad_id),
 //            ])
 //
 //            let now = ISO8601DateFormatter().string(from: Date.init())
@@ -941,8 +941,8 @@ extension DiomedeQuadStore {
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
         try env.write { (txn) -> Int in
             let cache = LRUCache<Term, Int>(capacity: 4_096)
-            var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_id").map { Int.fromData($0) } ?? 1
-            var next_quad_id = try stats_db.get(txn: txn, key: "next_quad_id").map { Int.fromData($0) } ?? 1
+            var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_term_id").map { Int.fromData($0) } ?? 1
+            var next_quad_id = try stats_db.get(txn: txn, key: "next_unassigned_quad_id").map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
             var quadIds = [[Int]]()
@@ -984,7 +984,7 @@ extension DiomedeQuadStore {
             try self.graphs_db.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
             
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_unassigned_id", next_term_id),
+                ("next_unassigned_term_id", next_term_id),
             ])
 
             let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
@@ -998,7 +998,7 @@ extension DiomedeQuadStore {
             }
 
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_quad_id", next_quad_id),
+                ("next_unassigned_quad_id", next_quad_id),
             ])
 
             let date = Date(timeIntervalSince1970: Double(version))
