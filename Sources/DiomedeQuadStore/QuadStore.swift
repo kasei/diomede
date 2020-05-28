@@ -663,7 +663,6 @@ extension DiomedeQuadStore {
     }
 
     public func quads(matching pattern: QuadPattern) throws -> AnyIterator<Quad> {
-        print("quads(matching: \(pattern))")
         let quadIds = try self.quadIds(matching: pattern)
         let i = self.quadsIterator(fromIds: quadIds)
         return AnyIterator(i.makeIterator())
@@ -848,14 +847,6 @@ extension DiomedeQuadStore {
                 b[name] = q[keyPath: path]
             }
             return b
-        }
-        print("bindings(matching: \(pattern))")
-        if true {
-            let r = results.map { (b) -> [String: Term] in
-                print("- \(b)")
-                return b
-            }
-            return AnyIterator(r.makeIterator())
         }
         return AnyIterator(results.makeIterator())
     }
