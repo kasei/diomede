@@ -77,7 +77,7 @@ if op == "stats" {
         print("Effective version: \(version)")
     }
     
-    for k in (["next_unassigned_term_id"]) {
+    for k in (["next_unassigned_term_id", "next_unassigned_quad_id"]) {
         if let d = try stats.get(key: k) {
             let value = Int.fromData(d)
             print("\(k): \(value)")
@@ -101,8 +101,14 @@ if op == "stats" {
     }
     
     let databases = Set(try e.databases())
-    if databases.contains("cs") {
+    let csDatabaseName = "characteristicSets"
+    if databases.contains(csDatabaseName) {
         print("  - Characteristic Sets")
+        if let db = e.database(named: csDatabaseName) {
+            let count = try db.count()
+            let avg = count / gcount
+            print("    - \(count) sets (~\(avg) per graph)")
+        }
     }
     
 //} else if op == "load" || op == "import" {
@@ -175,29 +181,44 @@ if op == "stats" {
         return 0
     }
 } else if op == "index" {
+    guard args.count > 2 else {
+        print("Index name argument required")
+        exit(1)
+    }
     let name = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
 
     if name == "cs" {
-        print("Generating Characteristic Sets")
+        print("Generating Characteristic Sets index")
         try qs.computeCharacteristicSets()
     } else {
         guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
             throw DiomedeError.indexError
         }
+        print("Generating \(indexOrder.rawValue) index")
         try qs.addFullIndex(order: indexOrder)
     }
 } else if op == "dropindex" {
+    guard args.count > 2 else {
+        print("Index name argument required")
+        exit(1)
+    }
     let name = args[2]
     guard var qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
-    guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
-        throw DiomedeError.indexError
+    if name == "cs" {
+        print("Dropping Characteristic Sets index")
+        try qs.dropCharacteristicSets()
+    } else {
+        guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
+            throw DiomedeError.indexError
+        }
+        print("Dropping \(indexOrder.rawValue) index")
+        try qs.dropFullIndex(order: indexOrder)
     }
-    try qs.dropFullIndex(order: indexOrder)
 } else if op == "triples" {
     let line = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
@@ -234,7 +255,7 @@ if op == "stats" {
         fatalError("Failed to construct quadstore")
     }
     for g in try qs.namedGraphs() {
-        print(g)
+        print(g.value)
     }
 } else if op == "indexes" {
     for name in availableIndexes {
@@ -271,25 +292,43 @@ if op == "stats" {
         return 0
     }
 } else if op == "cs" {
+    guard args.count > 2 else {
+        print("Graph IRI argument required")
+        exit(1)
+    }
+    let line = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
         fatalError("Failed to construct quadstore")
     }
 
-    let graph = Array(qs.graphs()).first!
-    guard let sets = try qs.characteristicSets(for: graph) else {
-        fatalError("No characteristic sets index found")
+    let graph = Term(iri: line)
+    do {
+        let dataset = try qs.characteristicSets(for: graph)
+        let sets = dataset.sets.sorted { $0.count >= $1.count }
+        for set in sets {
+            print("Characteristic Set: count = \(set.count)")
+            for pred in set.predicates.sorted() {
+                let occurences = set.predCounts[pred]!
+                print(String(format: "    %4d \(pred)", occurences))
+            }
+            print("")
+        }
+    } catch DiomedeError.indexError {
+        print("No characteristic sets index found")
+    } catch DiomedeError.nonExistentTermError {
+        print("No characteristic set found for graph \(graph)")
     }
 
-    var t1 = TriplePattern.all
-    t1.predicate = .bound(Term.rdf("type"))
-    t1.object = .bound(Term(iri: "http://xmlns.com/foaf/0.1/Person"))
-
-    var t2 = TriplePattern.all
-    t2.predicate = .bound(Term(iri: "http://xmlns.com/foaf/0.1/nick"))
-    
-//    let c1 = try sets.starCardinality(matching: [t1], in: graph, store: qs)
-//    print("[t1] Cardinality: \(c1)")
-    
-    let c2 = try sets.starCardinality(matching: [t1, t2], in: graph, store: qs)
-    print("[t1] Cardinality: \(c2)")
+//    var t1 = TriplePattern.all
+//    t1.predicate = .bound(Term.rdf("type"))
+//    t1.object = .bound(Term(iri: "http://xmlns.com/foaf/0.1/Person"))
+//
+//    var t2 = TriplePattern.all
+//    t2.predicate = .bound(Term(iri: "http://xmlns.com/foaf/0.1/nick"))
+//
+////    let c1 = try sets.starCardinality(matching: [t1], in: graph, store: qs)
+////    print("[t1] Cardinality: \(c1)")
+//
+//    let c2 = try sets.starCardinality(matching: [t1, t2], in: graph, store: qs)
+//    print("[t1] Cardinality: \(c2)")
 }

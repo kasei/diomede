@@ -157,23 +157,13 @@ public class Environment {
         }
     }
     
-    private func dropDatabase(named name: String) throws {
-        guard let db = self.database(named: name) else {
-            throw DiomedeError.databaseOpenError
-        }
-        try self.write { (txn) -> Int in
-            let r =  mdb_drop(txn, db.dbi, 1)
-            return Int(r)
-        }
-    }
-    
     public func dropDatabase(txn: OpaquePointer, named name: String) throws {
         guard let db = self.database(named: name) else {
             throw DiomedeError.databaseOpenError
         }
         mdb_drop(txn, db.dbi, 1)
     }
-    
+
     public func database(named name: String) -> Database? {
         let d = Database(environment: self, name: name)
         return d
@@ -730,6 +720,20 @@ public class Environment {
                         }
                     }
                 }
+            }
+        }
+
+        public func drop() throws {
+            try self.env.write { (txn) -> Int in
+                let r =  mdb_drop(txn, self.dbi, 1)
+                return Int(r)
+            }
+        }
+        
+        public func clear() throws {
+            try self.env.write { (txn) -> Int in
+                let r =  mdb_drop(txn, self.dbi, 0)
+                return Int(r)
             }
         }
     }

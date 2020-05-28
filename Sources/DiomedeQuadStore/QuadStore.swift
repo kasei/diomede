@@ -177,7 +177,14 @@ public struct DiomedeQuadStore {
     }
 
     func write(handler: (OpaquePointer) throws -> Int) throws {
-        try self.env.write(handler: handler)
+        let now = ISO8601DateFormatter().string(from: Date())
+        try self.env.write { (txn) throws -> Int in
+            let r = try handler(txn)
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                ("Last-Modified", now)
+            ])
+            return r
+        }
     }
 
     func bestIndex(matchingBoundPositions positions: Set<Int>) throws -> IndexOrder? {
@@ -667,6 +674,12 @@ extension DiomedeQuadStore {
         let i = self.quadsIterator(fromIds: quadIds)
         return AnyIterator(i.makeIterator())
     }
+
+    public func touch() throws {
+        try self.write { (_) -> Int in
+            return 0
+        }
+    }
 }
 
 //extension DiomedeQuadStore {
@@ -792,7 +805,7 @@ extension DiomedeQuadStore {
             let string = try String.fromData(d)
             if let date = f.date(from: string) {
                 let seconds = UInt64(date.timeIntervalSince1970)
-                print("effective version: \(seconds)")
+//                print("effective version: \(seconds)")
                 return seconds
             }
         }
@@ -939,7 +952,7 @@ extension DiomedeQuadStore {
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
-        try env.write { (txn) -> Int in
+        try self.write { (txn) -> Int in
             let cache = LRUCache<Term, Int>(capacity: 4_096)
             var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_term_id").map { Int.fromData($0) } ?? 1
             var next_quad_id = try stats_db.get(txn: txn, key: "next_unassigned_quad_id").map { Int.fromData($0) } ?? 1
@@ -999,12 +1012,6 @@ extension DiomedeQuadStore {
 
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
                 ("next_unassigned_quad_id", next_quad_id),
-            ])
-
-            let date = Date(timeIntervalSince1970: Double(version))
-            let now = ISO8601DateFormatter().string(from: date)
-            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-                ("Last-Modified", now)
             ])
 
             try self.quads_db.insert(txn: txn, uniqueKeysWithValues: quadPairs)

@@ -46,8 +46,8 @@ public struct CharacteristicIDSet: Codable {
 }
 
 public struct CharacteristicSet: Codable {
-    var count: Int
-    var predCounts: [Term: Int]
+    public var count: Int
+    public var predCounts: [Term: Int]
     
     init(_ cs: CharacteristicIDSet, from store: DiomedeQuadStore) {
         self.count = cs.count
@@ -69,11 +69,11 @@ public struct CharacteristicSet: Codable {
         self.predCounts = predCounts
     }
 
-    var predicates: Set<Term> {
+    public var predicates: Set<Term> {
         return Set(predCounts.keys)
     }
     
-    func isSuperset(of subset: CharacteristicSet) -> Bool {
+    public func isSuperset(of subset: CharacteristicSet) -> Bool {
         return predicates.isSuperset(of: subset.predicates)
     }
 }
@@ -83,6 +83,12 @@ public struct CharacteristicDataSet {
     var characteristicSets: [CharacteristicIDSet]
     var store: DiomedeQuadStore
 
+    public var sets: [CharacteristicSet] {
+        return characteristicSets.map {
+            CharacteristicSet($0, from: store)
+        }
+    }
+    
     public init(_ store: DiomedeQuadStore, characteristicSets: [CharacteristicIDSet]) throws {
         self.store = store
         self.characteristicSets = characteristicSets
@@ -301,11 +307,11 @@ extension CharacteristicDataSet: CustomDebugStringConvertible {
 }
 
 extension DiomedeQuadStore {
-    public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet? {
+    public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet {
         let indexName = "characteristicSets"
         
         guard let index = self.env.database(named: indexName) else {
-            return nil
+            throw DiomedeError.indexError
         }
         guard let gid = try self.id(for: graph) else {
             throw DiomedeError.nonExistentTermError
@@ -335,7 +341,35 @@ extension DiomedeQuadStore {
         return try CharacteristicDataSet(self, characteristicSets: sets)
     }
     
+    public func dropCharacteristicSets() throws {
+        let indexName = "characteristicSets"
+        let databases = Set(try env.databases())
+        if databases.contains(indexName) {
+//            print("dropping \(indexName)...")
+            if let index = self.env.database(named: indexName) {
+                try index.drop()
+                try self.touch() // update the last-modified timestamp
+            }
+        } else {
+//            print("no-op")
+        }
+    }
+    
     public func computeCharacteristicSets() throws {
+        let indexName = "characteristicSets"
+        let databases = Set(try env.databases())
+        if databases.contains(indexName) {
+            guard let index = self.env.database(named: indexName) else {
+                throw DiomedeError.indexError
+            }
+            try index.clear()
+        } else {
+            try self.write { (txn) -> Int in
+                try self.env.createDatabase(txn: txn, named: indexName)
+                return 0
+            }
+        }
+    
         for graph in self.graphs() {
             let sets = try CharacteristicDataSet(self, in: graph)
             guard let gid = try self.id(for: graph) else {
@@ -354,10 +388,8 @@ extension DiomedeQuadStore {
                 pairs.append((keyData, valueData))
                 
             }
-            
+
             try self.write { (txn) -> Int in
-                let indexName = "characteristicSets"
-                try self.env.createDatabase(txn: txn, named: indexName)
                 let index = self.env.database(txn: txn, named: indexName)!
                 try index.insert(txn: txn, uniqueKeysWithValues: pairs)
                 return 0
