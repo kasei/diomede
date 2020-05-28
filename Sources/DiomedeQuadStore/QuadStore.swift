@@ -663,6 +663,7 @@ extension DiomedeQuadStore {
     }
 
     public func quads(matching pattern: QuadPattern) throws -> AnyIterator<Quad> {
+        print("quads(matching: \(pattern))")
         let quadIds = try self.quadIds(matching: pattern)
         let i = self.quadsIterator(fromIds: quadIds)
         return AnyIterator(i.makeIterator())
@@ -836,7 +837,7 @@ extension DiomedeQuadStore {
     public func bindings(matching pattern: QuadPattern) throws -> AnyIterator<[String:Term]> {
         var bindings : [String: KeyPath<Quad, Term>] = [:]
         for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
-            if case .variable(let name, binding: true) = node {
+            if case .variable(let name, binding: _) = node {
                 bindings[name] = path
             }
         }
@@ -854,7 +855,7 @@ extension DiomedeQuadStore {
 //    public func results(matching pattern: QuadPattern) throws -> AnyIterator<TermResult> {
 //        var bindings : [String: KeyPath<Quad, Term>] = [:]
 //        for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
-//            if case .variable(let name, binding: true) = node {
+//            if case .variable(let name, binding: _) = node {
 //                bindings[name] = path
 //            }
 //        }
