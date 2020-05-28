@@ -849,6 +849,14 @@ extension DiomedeQuadStore {
             }
             return b
         }
+        print("bindings(matching: \(pattern))")
+        if true {
+            let r = results.map { (b) -> [String: Term] in
+                print("- \(b)")
+                return b
+            }
+            return AnyIterator(r.makeIterator())
+        }
         return AnyIterator(results.makeIterator())
     }
     
