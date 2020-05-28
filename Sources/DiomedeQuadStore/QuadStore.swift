@@ -616,8 +616,10 @@ extension DiomedeQuadStore {
                 for (i, n) in pattern.enumerated() {
                     if case .bound(let term) = n {
                         boundPositions.insert(i)
-                        
-                        restrictions[i] = try self.id(for: term, txn: txn)
+                        guard let tid = try self.id(for: term, txn: txn) else {
+                            throw DiomedeError.nonExistentTermError
+                        }
+                        restrictions[i] = tid
                     }
                 }
                 if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
