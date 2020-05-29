@@ -69,7 +69,7 @@ Optional databases used for indexing may also be present:
 
 ## Term Encoding
 
-The encoding of RDF terms produces a UTF-8 encoded string which is either stored in the database (in `id_to_term`) or hashed with SHA256 and stored (in `term_to_id`).
+The encoding of RDF terms (performed in [RDFExtensions.swift](Sources/DiomedeQuadStore/RDFExtensions.swift)) produces a UTF-8 encoded string which is either stored in the database (in `id_to_term`) or hashed with SHA256 and stored (in `term_to_id`).
 The encodings depend on the term type, but all identify the type with the first character.
 
 * IRIs
