@@ -21,7 +21,7 @@ The use of LMDB, and the specific data layout used is meant to be both extensibl
 
 Using tools built from both this repository and from [Kineo](https://github.com/kasei/kineo):
 
-```
+```sh
 ./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq
 ./diomede/.build/debug/quadstore-cli sample-database.db addindex gpso
 ./diomede/.build/debug/quadstore-cli sample-database.db addindex cs
@@ -42,7 +42,7 @@ Indexes:
     - 16804 sets (~5 per graph)
 ```
 
-```
+```sh
 ./diomede/.build/debug/quadstore-cli sample-database.db graphs
 ```
 
@@ -55,7 +55,7 @@ urn:uuid:612cd8f3-9691-4290-8f87-42a4b22555ab
 ...
 ```
 
-```
+```sh
 ./diomede/.build/debug/quadstore-cli sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
 ```
 
@@ -88,7 +88,7 @@ Characteristic Set: count = 1
        1 <http://www.w3.org/2000/01/rdf-schema#label>
 ```
 
-```
+```sh
 ./diomede/.build/debug/quadstore-cli sample-database.db quads
 ```
 
