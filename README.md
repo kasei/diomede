@@ -6,6 +6,7 @@ An LMDB-based RDF quadstore.
 
 * [Table of Contents](#table-of-contents)
 * [Description](#description)
+* [Usaage](#usage)
 * [Data Layout](#data-layout)
 * [Term Encoding](#term-encoding)
 * [API and Design Choices](#api-and-design-choices)
@@ -15,6 +16,96 @@ An LMDB-based RDF quadstore.
 Diomede is an RDF quadstore written in Swift.
 It uses [LMDB](http://www.lmdb.tech/) as its underlying storage engine, and is designed to integrate into the [Kineo](https://github.com/kasei/kineo) SPARQL engine.
 The use of LMDB, and the specific data layout used is meant to be both extensible and usable in a progressive manner in which simple tasks can be accomplished with only a subset of the database structure.
+
+## Usage
+
+Using tools built from both this repository and from [Kineo](https://github.com/kasei/kineo):
+
+```
+./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq
+./diomede/.build/debug/quadstore-cli sample-database.db addindex gpso
+./diomede/.build/debug/quadstore-cli sample-database.db addindex cs
+./diomede/.build/debug/quadstore-cli sample-database.db stats
+```
+
+```
+Diomede-Version: 0.0.13
+Last-Modified: 2020-05-29T17:57:35Z
+Effective version: 1590775055
+next_unassigned_term_id: 41111
+next_unassigned_quad_id: 96902
+graphs: 3100
+Quads: 96901
+Indexes:
+  - gpso
+  - Characteristic Sets
+    - 16804 sets (~5 per graph)
+```
+
+```
+./diomede/.build/debug/quadstore-cli sample-database.db graphs
+```
+
+```
+urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
+urn:uuid:610e0000-0e80-4e10-8455-3ba38710d97c
+urn:uuid:6113262b-b790-4c40-8cac-676e0dc5718c
+urn:uuid:6132c557-d0eb-456b-96b5-8b49a4d9091a
+urn:uuid:612cd8f3-9691-4290-8f87-42a4b22555ab
+...
+```
+
+```
+./diomede/.build/debug/quadstore-cli sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
+```
+
+```
+Graph: <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581>
+Number of Characteristic Set: 4 
+
+Characteristic Set: count = 4
+       4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+       4 <http://www.w3.org/2000/01/rdf-schema#label>
+
+Characteristic Set: count = 2
+       2 <http://www.cidoc-crm.org/cidoc-crm/P190_has_symbolic_content>
+       2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+
+Characteristic Set: count = 1
+       1 <http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P82a_begin_of_the_begin>
+       1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+       1 <http://www.w3.org/2000/01/rdf-schema#label>
+
+Characteristic Set: count = 1
+       1 <http://www.cidoc-crm.org/cidoc-crm/P14_carried_out_by>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P2_has_type>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P4_has_time-span>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P67i_is_referred_to_by>
+       1 <http://www.cidoc-crm.org/cidoc-crm/P7_took_place_at>
+       1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+       1 <http://www.w3.org/2000/01/rdf-schema#label>
+```
+
+```
+./diomede/.build/debug/quadstore-cli sample-database.db quads
+```
+
+```
+<http://vocab.getty.edu/aat/300054751> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E55_Type> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+<urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E7_Activity> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+<urn:uuid:5eb9e877-dc18-4783-8aea-d7153c045882> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E74_Group> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+_:C368E10B-04CF-4D5B-9751-5384648F219E <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E33_E41_Linguistic_Appellation> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+_:7DBAAF97-9750-4325-917F-87B753C393E5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E52_Time-Span> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+<urn:uuid:c0716ced-d43f-4580-b888-c6764057c4fa> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E33_Linguistic_Object> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+<urn:uuid:95bfa369-0d77-4ec3-a757-e011cfe2964c> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E53_Place> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+_:6CA4A01D-3C96-4974-B002-39D7F4535564 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.cidoc-crm.org/cidoc-crm/E33_E41_Linguistic_Appellation> <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+<http://vocab.getty.edu/aat/300054751> <http://www.w3.org/2000/01/rdf-schema#label> "Auction Event" <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581> .
+...
+```
+
+
 
 ## Data Layout
 
@@ -50,7 +141,7 @@ The required databases are:
 	This is a table of metadata useful to either/both the Diomede system or to end-users.
 	Some keys that are present are:
 	
-	* `Version`
+	* `Diomede-Version`
 	* `Last-Modified`
 	* `next_unassigned_term_id`
 	* `next_unassigned_quad_id`
