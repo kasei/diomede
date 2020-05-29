@@ -7,6 +7,7 @@
 
 import Foundation
 import SPARQLSyntax
+import Diomede
 
 extension Term: DataEncodable {
     public func asData() throws -> Data {
