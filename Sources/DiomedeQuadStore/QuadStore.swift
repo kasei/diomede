@@ -147,7 +147,7 @@ public struct DiomedeQuadStore {
                     
                     let now = ISO8601DateFormatter().string(from: Date.init())
                     try stats.insert(txn: txn, uniqueKeysWithValues: [
-                        ("Version", "0.0.1"),
+                        ("Diomede-Version", "0.0.13"),
                         ("meta", ""),
                         ("Last-Modified", now)
                     ])
@@ -220,7 +220,7 @@ public struct DiomedeQuadStore {
         return indexOrder
     }
 
-    func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
+    public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
         guard let (index, order) = self.fullIndexes[indexOrder] else {
             throw DiomedeError.indexError
         }
@@ -263,7 +263,7 @@ public struct DiomedeQuadStore {
         }
     }
     
-    private func iterateQuadIds(txn: OpaquePointer, usingIndex indexOrder: IndexOrder? = nil, handler: (Int, [Int]) throws -> ()) throws {
+    public func iterateQuadIds(txn: OpaquePointer, usingIndex indexOrder: IndexOrder? = nil, handler: (Int, [Int]) throws -> ()) throws {
         if let indexOrder = indexOrder, let (index, order) = self.fullIndexes[indexOrder] {
             let iterationHandler = { (qidsData: Data, qidData: Data) throws -> () in
                 let qid = Int.fromData(qidData)
@@ -294,7 +294,7 @@ public struct DiomedeQuadStore {
         }
     }
 
-    private func quad(from tids: [Int], txn: OpaquePointer, cache: LRUCache<Int, Term>? = nil) throws -> Quad? {
+    func quad(from tids: [Int], txn: OpaquePointer, cache: LRUCache<Int, Term>? = nil) throws -> Quad? {
         var terms = [Term]()
         for tid in tids {
             if let cache = cache, let term = cache[tid] {
@@ -318,7 +318,7 @@ public struct DiomedeQuadStore {
         }
     }
 
-    private func term(from tid: Int, txn: OpaquePointer, cache: LRUCache<Int, Term>? = nil) throws -> Term? {
+    func term(from tid: Int, txn: OpaquePointer, cache: LRUCache<Int, Term>? = nil) throws -> Term? {
         if let cache = cache, let term = cache[tid] {
             return term
         } else if let tdata = try i2t_db.get(txn: txn, key: tid) {
@@ -332,7 +332,7 @@ public struct DiomedeQuadStore {
         }
     }
 
-    private func iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
+    func iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         try iterateQuadIds(txn: txn, usingIndex: indexOrder) { (qid, tids) throws in
             var terms = [Term]()
@@ -435,7 +435,7 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: termIds)
     }
 
-    private func quadsIterator(fromIds ids: [[Int]]) -> AnyIterator<Quad> {
+    func quadsIterator(fromIds ids: [[Int]]) -> AnyIterator<Quad> {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         let chunkSize = 1024
 
@@ -677,6 +677,12 @@ extension DiomedeQuadStore {
         return AnyIterator(i.makeIterator())
     }
 
+    public func quads(using indexOrder: IndexOrder) throws -> AnyIterator<Quad> {
+        let quadIds = try self.quadIds(usingIndex: indexOrder, withPrefix: [])
+        let i = self.quadsIterator(fromIds: quadIds)
+        return AnyIterator(i.makeIterator())
+    }
+
     public func touch() throws {
         try self.write { (_) -> Int in
             return 0
@@ -789,6 +795,11 @@ extension DiomedeQuadStore {
     public func _private_iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
         return try self.iterateQuads(txn: txn, usingIndex: indexOrder, handler: handler)
     }
+
+    public func _private_quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
+        return try self.quadIds(usingIndex: indexOrder, withPrefix: prefix)
+    }
+    
 }
 
 extension DiomedeQuadStore {

@@ -67,7 +67,7 @@ public class Environment {
         try run(flags: 0, handler: handler)
     }
     
-    private func run(flags: UInt32, handler: (OpaquePointer) throws -> Int) rethrows {
+    func run(flags: UInt32, handler: (OpaquePointer) throws -> Int) rethrows {
         var txn : OpaquePointer? = nil
         let rc = mdb_txn_begin(env, nil, flags, &txn)
         if (rc == 0) {
@@ -125,7 +125,8 @@ public class Environment {
             guard (rc == 0) else {
                 throw DiomedeError.cursorOpenError(rc)
             }
-
+            defer { mdb_cursor_close(cursor) }
+            
             var op = MDB_FIRST
             while (mdb_cursor_get(cursor, &key, &data, op) == 0) {
                 op = MDB_NEXT
@@ -134,13 +135,12 @@ public class Environment {
                     names.append(name)
                 }
             }
-            mdb_cursor_close(cursor)
             return 0
         }
         return names
     }
     
-    private func createDatabase(named name: String) throws {
+    func createDatabase(named name: String) throws {
         try self.write { (txn) -> Int in
             var dbi: MDB_dbi = 0
             if (mdb_dbi_open(txn, name, UInt32(MDB_CREATE), &dbi) != 0) {
@@ -333,7 +333,8 @@ public class Environment {
                 guard (rc == 0) else {
                     throw DiomedeError.cursorOpenError(rc)
                 }
-
+                defer { mdb_cursor_close(cursor) }
+                
                 var key = MDB_val(mv_size: 0, mv_data: nil)
                 var data = MDB_val(mv_size: 0, mv_data: nil)
                 rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
@@ -360,7 +361,8 @@ public class Environment {
                 guard (rc == 0) else {
                     throw DiomedeError.cursorOpenError(rc)
                 }
-
+                defer { mdb_cursor_close(cursor) }
+                
                 var key = MDB_val(mv_size: 0, mv_data: nil)
                 var data = MDB_val(mv_size: 0, mv_data: nil)
                 var upperBound = MDB_val(mv_size: 0, mv_data: nil)
@@ -402,7 +404,8 @@ public class Environment {
                 guard (rc == 0) else {
                     throw DiomedeError.cursorOpenError(rc)
                 }
-
+                defer { mdb_cursor_close(cursor) }
+                
                 var key = MDB_val(mv_size: 0, mv_data: nil)
                 var data = MDB_val(mv_size: 0, mv_data: nil)
                 var upperBound = MDB_val(mv_size: 0, mv_data: nil)
@@ -454,7 +457,7 @@ public class Environment {
         }
 
         public func iterate(txn: OpaquePointer, handler: (Data, Data) throws -> ()) throws {
-//            print("iterating on database \(name)")
+            print("iterating on database \(name)")
             var key = MDB_val(mv_size: 0, mv_data: nil)
             var data = MDB_val(mv_size: 0, mv_data: nil)
             
