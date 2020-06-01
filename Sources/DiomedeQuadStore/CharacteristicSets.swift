@@ -208,7 +208,7 @@ public struct CharacteristicDataSet {
         let op_count = try store.countQuads(matching: pattern)
         
         let s = Double(op_count) / Double(p_count)
-        print("selectivity of \(object) given \(predicate) in \(graph): \(s)")
+//        print("selectivity of \(object) given \(predicate) in \(graph): \(s)")
         return s
     }
     
@@ -241,10 +241,10 @@ public struct CharacteristicDataSet {
         var card = 0.0
         let matching = characteristicSets.filter { $0.isSuperset(of: subset) }
         let subsetPreds = store.termIterator(fromIds: Array(subset.predicates)).map { $0.description }.sorted()
-        print("\(matching.count) characteristic sets match: \(subsetPreds)")
+//        print("\(matching.count) characteristic sets match: \(subsetPreds)")
         for set in matching {
             let cs = CharacteristicSet(set, from: store)
-            print("matching set: \(cs)")
+//            print("matching set: \(cs)")
             let distinct = Double(set.count)
             var m = 1.0
             var o = 1.0
@@ -258,21 +258,21 @@ public struct CharacteristicDataSet {
                         throw DiomedeError.nonExistentTermError
                     }
                     let tm = Double(set.predCounts[pid] ?? 0) / distinct
-                    print("\(tm) <= \(t)")
+//                    print("\(tm) <= \(t)")
                     m *= tm
                 } else {
                     // unbound predicate; sum up all the counts
                     let allPredCounts = set.predCounts.values.map { Double($0) }.reduce(0.0) { $0 + $1 }
                     let tm = allPredCounts / distinct
-                    print("\(tm) <= \(t)")
+//                    print("\(tm) <= \(t)")
                     m *= tm
                 }
             }
             let prod = distinct * m * o
-            print("\(distinct) * \(m) * \(o) = \(prod)")
+//            print("\(distinct) * \(m) * \(o) = \(prod)")
             card += prod
         }
-        print("= \(card)")
+//        print("= \(card)")
         return card
     }
 }
