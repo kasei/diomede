@@ -54,7 +54,7 @@ public struct DiomedeQuadStore {
         }
     }
     
-    enum NextIDKey: String {
+    public enum NextIDKey: String {
         case term = "next_unassigned_term_id"
         case quad = "next_unassigned_quad_id"
     }
@@ -75,7 +75,7 @@ public struct DiomedeQuadStore {
     var indexes_db: Environment.Database
     var stats_db: Environment.Database
     var graphs_db: Environment.Database
-    var fullIndexes: [IndexOrder: (Environment.Database, [Int])]
+    public var fullIndexes: [IndexOrder: (Environment.Database, [Int])]
     
     private init?(environment e: Environment) {
         self.env = e
@@ -898,6 +898,12 @@ extension DiomedeQuadStore {
 //    }
 
     public func countQuads(matching pattern: QuadPattern) throws -> Int {
+        
+        
+        
+        
+        
+        
         var bestIndex: IndexOrder? = nil
         var prefix = [Int]()
         var restrictions = [Int: Int]()

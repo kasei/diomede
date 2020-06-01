@@ -5,6 +5,42 @@ import Diomede
 import DiomedeQuadStore
 import SPARQLSyntax
 
+func getCurrentTime() -> CFAbsoluteTime {
+    return CFAbsoluteTimeGetCurrent()
+}
+
+func time(_ name: String, block: () throws -> ()) rethrows {
+    let start = getCurrentTime()
+    try block()
+    let end = getCurrentTime()
+    let elapsed = end - start
+    print("[\(name)] Elapsed time: \(elapsed)s")
+}
+
+func humanReadable(bytes: Int) -> String{
+    var names = [" bytes", "kB", "MB", "GB"]
+    var unit = names.remove(at: 0)
+    var size = bytes
+    while !names.isEmpty && size >= 1024 {
+        unit = names.remove(at: 0)
+        size /= 1024
+    }
+    return "\(size)\(unit)"
+}
+
+func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet) {
+    let sets = dataset.sets.sorted { $0.count >= $1.count }
+    print("")
+    for set in sets {
+        print("Characteristic Set: count = \(set.count)")
+        for pred in set.predicates.sorted() {
+            let occurences = set.predCounts[pred]!
+            print(String(format: "    %4d \(pred)", occurences))
+        }
+        print("")
+    }
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 let pname = CommandLine.arguments[0]
 guard args.count >= 2 else {
@@ -150,8 +186,8 @@ if op == "stats" {
         print("Effective version: \(version)")
     }
     
-    for k in (["next_unassigned_term_id", "next_unassigned_quad_id"]) {
-        if let d = try stats.get(key: k) {
+    for k in ([DiomedeQuadStore.NextIDKey.term, DiomedeQuadStore.NextIDKey.quad]) {
+        if let d = try stats.get(key: k.rawValue) {
             let value = Int.fromData(d)
             print("\(k): \(value)")
         }
@@ -162,7 +198,8 @@ if op == "stats" {
     let quads = e.database(named: "quads")!
     try e.read { (txn) -> Int in
         let count = quads.count(txn: txn)
-        print("Quads: \(count)")
+        let bytes = quads.size(txn: txn)
+        print("Quads: \(count) (\(humanReadable(bytes: bytes)))")
         return 0
     }
     
@@ -172,16 +209,27 @@ if op == "stats" {
         print("No indexes")
     } else {
         print("Indexes:")
-        try indexes.iterate { (k, v) in
-            let name = try String.fromData(k)
-            print("  - \(name)")
+        for (indexOrder, _) in qs.fullIndexes {
+            let name = indexOrder.rawValue
+            try e.read { (txn) in
+                guard let index = e.database(txn: txn, named: name) else {
+                    return 1
+                }
+                let bytes = index.size(txn: txn)
+                print("  - \(name) (\(humanReadable(bytes: bytes)))")
+                return 0
+            }
         }
     }
     
     let databases = Set(try e.databases())
     if databases.contains(csDatabaseName) {
-        print("  - Characteristic Sets")
         if let db = e.database(named: csDatabaseName) {
+            try e.read { (txn) in
+                let bytes = db.size(txn: txn)
+                print("  - Characteristic Sets (\(humanReadable(bytes: bytes)))")
+                return 0
+            }
             let count = try db.count()
             let avg = count / gcount
             print("    - \(count) sets (~\(avg) per graph)")
@@ -372,11 +420,6 @@ if op == "stats" {
     }
     
 } else if op == "cs" {
-    guard args.count > 2 else {
-        print("Graph IRI argument required")
-        exit(1)
-    }
-    let line = args[2]
     guard let qs = DiomedeQuadStore(path: path) else {
         print("Failed to construct quadstore")
         exit(1)
@@ -388,37 +431,76 @@ if op == "stats" {
         exit(1)
     }
 
-    let graph = Term(iri: line)
+
     do {
-        let dataset = try qs.characteristicSets(for: graph)
-        let sets = dataset.sets.sorted { $0.count >= $1.count }
-        print("Graph: \(graph)")
-        print("Number of Characteristic Set: \(sets.count) ")
-        print("")
-        for set in sets {
-            print("Characteristic Set: count = \(set.count)")
-            for pred in set.predicates.sorted() {
-                let occurences = set.predCounts[pred]!
-                print(String(format: "    %4d \(pred)", occurences))
+        if args.count <= 2 {
+            var count = 0
+            for graph in qs.graphs() {
+                print("Graph: \(graph)")
+                let dataset = try qs.characteristicSets(for: graph)
+                count += dataset.sets.count
+                printCharacteristicSets(for: graph, in: dataset)
             }
-            print("")
+            print("Total Number of Characteristic Sets: \(count) ")
+        } else {
+            let line = args[2]
+            let graph = Term(iri: line)
+            do {
+                let dataset = try qs.characteristicSets(for: graph)
+                
+                print("Graph: \(graph)")
+                printCharacteristicSets(for: graph, in: dataset)
+                print("Number of Characteristic Sets: \(dataset.sets.count) ")
+            } catch DiomedeError.nonExistentTermError {
+                print("No characteristic set found for graph \(graph)")
+            }
         }
     } catch DiomedeError.indexError {
         print("No characteristic sets index found")
-    } catch DiomedeError.nonExistentTermError {
-        print("No characteristic set found for graph \(graph)")
     }
+} else if op == "pred-card" {
+    guard args.count > 3 else {
+        print("Index name argument required")
+        exit(1)
+    }
+    let graph = Term(iri: args[2])
+    let pred = Term(iri: args[3])
     
-    //    var t1 = TriplePattern.all
-    //    t1.predicate = .bound(Term.rdf("type"))
-    //    t1.object = .bound(Term(iri: "http://xmlns.com/foaf/0.1/Person"))
-    //
-    //    var t2 = TriplePattern.all
-    //    t2.predicate = .bound(Term(iri: "http://xmlns.com/foaf/0.1/nick"))
-    //
-    ////    let c1 = try sets.starCardinality(matching: [t1], in: graph, store: qs)
-    ////    print("[t1] Cardinality: \(c1)")
-    //
-    //    let c2 = try sets.starCardinality(matching: [t1, t2], in: graph, store: qs)
-    //    print("[t1] Cardinality: \(c2)")
+    guard let qs = DiomedeQuadStore(path: path) else {
+        print("Failed to construct quadstore")
+        exit(1)
+    }
+
+    let databases = Set(try e.databases())
+    if !databases.contains(csDatabaseName) {
+        print("No Characteristic Sets index found")
+        exit(1)
+    }
+
+    do {
+        var t1 = TriplePattern.all
+        var q1 = QuadPattern.all
+        t1.predicate = .bound(pred)
+
+        q1.predicate = .bound(pred)
+        q1.graph = .bound(graph)
+        
+        try time("Estimated") {
+            var estimatedCardinality = 0.0
+//            for graph in qs.graphs() {
+                let dataset = try qs.characteristicSets(for: graph)
+                let c1 = try dataset.starCardinality(matching: [t1], in: graph, store: qs)
+                estimatedCardinality += c1
+//            }
+            print("Estimated: \(estimatedCardinality)")
+        }
+
+        try time("Actual") {
+            let actualCardinality = try qs.countQuads(matching: q1)
+            print("Actual   : \(actualCardinality)")
+        }
+    } catch DiomedeError.indexError {
+        print("No characteristic sets index found")
+    }
 }
+
