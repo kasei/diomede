@@ -534,6 +534,20 @@ public class Environment {
             return stat.ms_entries
         }
         
+        public func size(txn: OpaquePointer) -> Int {
+            var stat = MDB_stat(ms_psize: 0, ms_depth: 0, ms_branch_pages: 0, ms_leaf_pages: 0, ms_overflow_pages: 0, ms_entries: 0)
+            let rc = mdb_stat(txn, dbi, &stat)
+            if rc != 0 {
+                print("*** mdb_stat call returned \(rc)")
+                return 0
+            }
+            let leaf_count = stat.ms_leaf_pages
+            let internal_count = stat.ms_branch_pages
+            let pages = leaf_count + internal_count
+            let size = pages * Int(stat.ms_psize)
+            return size
+        }
+        
         public func count() throws -> Int {
             var count = 0
             try self.env.read { (txn) -> Int in
