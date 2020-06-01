@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CryptoKit
 
 import SPARQLSyntax
 import Diomede
@@ -53,6 +52,11 @@ public struct DiomedeQuadStore {
             }
             return order
         }
+    }
+    
+    enum NextIDKey: String {
+        case term = "next_unassigned_term_id"
+        case quad = "next_unassigned_quad_id"
     }
     
     public enum StaticDatabases: String {
@@ -152,8 +156,8 @@ public struct DiomedeQuadStore {
                         ("Last-Modified", now)
                     ])
                     try stats.insert(txn: txn, uniqueKeysWithValues: [
-                        ("next_unassigned_term_id", 1),
-                        ("next_unassigned_quad_id", 1),
+                        (NextIDKey.term.rawValue, 1),
+                        (NextIDKey.quad.rawValue, 1),
                     ])
                     return 0
                 }
@@ -358,8 +362,7 @@ public struct DiomedeQuadStore {
     }
     
     func id(for term: Term, txn: OpaquePointer) throws -> Int? {
-        let d = try term.asData()
-        let term_key = Data(SHA256.hash(data: d))
+        let term_key = try term.sha256()
         if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
             return Int.fromData(eid)
         } else {
@@ -368,8 +371,7 @@ public struct DiomedeQuadStore {
     }
     
     func id(for term: Term) throws -> Int? {
-        let d = try term.asData()
-        let term_key = Data(SHA256.hash(data: d))
+        let term_key = try term.sha256()
         var id : Int? = nil
         try self.env.read { (txn) -> Int in
             if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
@@ -575,7 +577,7 @@ extension DiomedeQuadStore {
             }
         }
         
-        let term_key = try Data(SHA256.hash(data: graph.asData()))
+        let term_key = try graph.sha256()
         var gid: Int = 0
         try self.env.read { (txn) -> Int in
             guard let data = try self.t2i_db.get(txn: txn, key: term_key) else {
@@ -967,8 +969,8 @@ extension DiomedeQuadStore {
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
         try self.write { (txn) -> Int in
             let cache = LRUCache<Term, Int>(capacity: 4_096)
-            var next_term_id = try stats_db.get(txn: txn, key: "next_unassigned_term_id").map { Int.fromData($0) } ?? 1
-            var next_quad_id = try stats_db.get(txn: txn, key: "next_unassigned_quad_id").map { Int.fromData($0) } ?? 1
+            var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
+            var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
             var quadIds = [[Int]]()
@@ -979,8 +981,7 @@ extension DiomedeQuadStore {
                     for (i, t) in q.enumerated() {
                         terms.insert(t)
                         let d = try t.asData()
-                        
-                        let term_key = Data(SHA256.hash(data: d))
+                        let term_key = try t.sha256()
                         var tid: Int
                         if let cached_id = cache[t] {
                             tid = cached_id
@@ -989,7 +990,7 @@ extension DiomedeQuadStore {
                         } else {
                             tid = next_term_id
                             let i2t_pair = (tid, d)
-                            let t2i_pair = (Data(SHA256.hash(data: d)), tid)
+                            let t2i_pair = (term_key, tid)
                             try self.i2t_db.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
                             try self.t2i_db.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
                             next_term_id += 1
@@ -1010,7 +1011,7 @@ extension DiomedeQuadStore {
             try self.graphs_db.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
             
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_unassigned_term_id", next_term_id),
+                (NextIDKey.term.rawValue, next_term_id),
             ])
 
             let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
@@ -1024,7 +1025,7 @@ extension DiomedeQuadStore {
             }
 
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
-                ("next_unassigned_quad_id", next_quad_id),
+                (NextIDKey.quad.rawValue, next_quad_id),
             ])
 
             try self.quads_db.insert(txn: txn, uniqueKeysWithValues: quadPairs)

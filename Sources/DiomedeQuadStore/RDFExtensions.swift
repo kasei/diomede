@@ -6,10 +6,17 @@
 //
 
 import Foundation
+import CryptoKit
 import SPARQLSyntax
 import Diomede
 
 extension Term: DataEncodable {
+    public func sha256() throws -> Data {
+        let d = try self.asData()
+        let term_key = Data(SHA256.hash(data: d))
+        return term_key
+    }
+
     public func asData() throws -> Data {
         let s: String
         switch self.type {
