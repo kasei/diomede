@@ -136,8 +136,8 @@ public struct DiomedeQuadStore {
                     try e.createDatabase(txn: txn, named: StaticDatabases.term_to_id.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.id_to_term.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.graphs.rawValue)
-//                    try e.createDatabase(txn: txn, named: "spog") // spog is required
-//                    try e.createDatabase(txn: txn, named: "gpso") // all other index orders are optional
+//                    try e.createDatabase(txn: txn, named: "spog")
+//                    try e.createDatabase(txn: txn, named: "gpso")
                     let stats = e.database(txn: txn, named: StaticDatabases.stats.rawValue)!
 //                    let indexes = e.database(txn: txn, named: StaticDatabases.fullIndexes.rawValue)!
 //                    try indexes.insert(uniqueKeysWithValues: [
