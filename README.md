@@ -187,6 +187,12 @@ The encodings depend on the term type, but all identify the type with the first 
 	* QUOTATION MARK (U+0022)
 	* Integer string value
 
+* `xsd:string` Literals
+
+	* LATIN SMALL LETTER S (U+0053)
+	* QUOTATION MARK (U+0022)
+	* Literal value
+
 * Other Datatype Literals
 
 	* LATIN CAPITAL LETTER D (U+0044)
