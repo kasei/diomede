@@ -22,7 +22,7 @@ The use of LMDB, and the specific data layout used is meant to be both extensibl
 Using tools built from both this repository and from [Kineo](https://github.com/kasei/kineo):
 
 ```sh
-./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq
+./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq create
 ./diomede/.build/debug/quadstore-cli sample-database.db addindex gpso
 ./diomede/.build/debug/quadstore-cli sample-database.db addindex cs
 ./diomede/.build/debug/quadstore-cli sample-database.db stats
