@@ -973,15 +973,21 @@ extension DiomedeQuadStore {
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
+        let start = CFAbsoluteTimeGetCurrent()
         try self.write { (txn) -> Int in
-            let cache = LRUCache<Term, Int>(capacity: 4_096)
             var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
             var quadIds = [[Int]]()
             var terms = Set<Term>()
-            for q in quads {
+            for (i, q) in quads.enumerated() {
+//                if i % 10000 == 0 {
+//                    let elapsed = CFAbsoluteTimeGetCurrent() - start
+//                    let tps = Double(i) / elapsed
+//                    print("\(i) (\(tps) T/s)")
+//                    //                    print("\r\(i) (\(tps) t/s)", terminator: "")
+//                }
                 do {
                     var termIds = [Int]()
                     for (i, t) in q.enumerated() {
@@ -989,9 +995,7 @@ extension DiomedeQuadStore {
                         let d = try t.asData()
                         let term_key = try t.sha256()
                         var tid: Int
-                        if let cached_id = cache[t] {
-                            tid = cached_id
-                        } else if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
+                        if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
                             tid = Int.fromData(eid)
                         } else {
                             tid = next_term_id
@@ -1002,7 +1006,6 @@ extension DiomedeQuadStore {
                             next_term_id += 1
                         }
 
-                        cache[t] = tid
                         termIds.append(tid)
                         if (i == 3) {
                             graphIds.insert(tid)
