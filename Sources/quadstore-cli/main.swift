@@ -209,15 +209,18 @@ if op == "stats" {
         print("No indexes")
     } else {
         print("Indexes:")
-        for (indexOrder, _) in qs.fullIndexes {
-            let name = indexOrder.rawValue
-            try e.read { (txn) in
-                guard let index = e.database(txn: txn, named: name) else {
-                    return 1
+        let indexNames = qs.fullIndexes.keys.map { $0.rawValue }.sorted()
+        if !indexNames.isEmpty {
+            print("  - Quad Orderings:")
+            for name in indexNames {
+                try e.read { (txn) in
+                    guard let index = e.database(txn: txn, named: name) else {
+                        return 1
+                    }
+                    let bytes = index.size(txn: txn)
+                    print("    - \(name) (\(humanReadable(bytes: bytes)))")
+                    return 0
                 }
-                let bytes = index.size(txn: txn)
-                print("  - \(name) (\(humanReadable(bytes: bytes)))")
-                return 0
             }
         }
     }
