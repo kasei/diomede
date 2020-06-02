@@ -15,30 +15,50 @@ public enum DiomedeError: Error {
     case transactionError(Int32)
 }
 
+public struct DiomedeConfiguration {
+    public static var `default` = DiomedeConfiguration(
+        mapSize: 4_096_000_000,
+        maxDatabases: 256,
+        flags: MDB_NOSYNC, // | MDB_NOTLS
+        mode: 0o0640
+    )
+    
+    var mapSize: Int
+    var maxDatabases: UInt32
+    var flags: Int32
+    var mode: mdb_mode_t
+    public init(mapSize: Int, maxDatabases: UInt32, flags: Int32, mode: mdb_mode_t) {
+        self.mapSize = mapSize
+        self.maxDatabases = maxDatabases
+        self.flags = flags
+        self.mode = mode
+    }
+}
+
 public class Environment {
     var env : OpaquePointer?
     
-    public init?(path: String) {
+    public init?(path: String, configuration _cfg: DiomedeConfiguration? = nil) {
+        let cfg = _cfg ?? DiomedeConfiguration.default
+        
         env = nil
         if (mdb_env_create(&env) != 0) {
             return nil
         }
         
-        if (mdb_env_set_mapsize(env, 8192000000) != 0) {
+        if (mdb_env_set_mapsize(env, cfg.mapSize) != 0) {
             mdb_env_close(env)
             env = nil
             return nil
         }
         
-        if (mdb_env_set_maxdbs(env, 256) != 0) {
+        if (mdb_env_set_maxdbs(env, cfg.maxDatabases) != 0) {
             mdb_env_close(env)
             env = nil
             return nil
         }
         
-        
-        let flags = MDB_NOSYNC // | MDB_NOTLS
-        if (mdb_env_open(env, path, UInt32(flags), 0o0640) != 0) {
+        if (mdb_env_open(env, path, UInt32(cfg.flags), cfg.mode) != 0) {
             mdb_env_close(env)
             env = nil
             return nil
