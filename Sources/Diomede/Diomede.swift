@@ -8,6 +8,7 @@ public enum DiomedeError: Error {
     case cursorOpenError(Int32)
     case cursorError
     case insertError
+    case mapFullError
     case getError
     case deleteError
     case indexError
@@ -23,10 +24,10 @@ public struct DiomedeConfiguration {
         mode: 0o0640
     )
     
-    var mapSize: Int
-    var maxDatabases: UInt32
-    var flags: Int32
-    var mode: mdb_mode_t
+    public var mapSize: Int
+    public var maxDatabases: UInt32
+    public var flags: Int32
+    public var mode: mdb_mode_t
     public init(mapSize: Int, maxDatabases: UInt32, flags: Int32, mode: mdb_mode_t) {
         self.mapSize = mapSize
         self.maxDatabases = maxDatabases
@@ -725,7 +726,9 @@ public class Environment {
                             var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
                             var value = MDB_val(mv_size: vData.count, mv_data: UnsafeMutableRawPointer(mutating: vPtr.baseAddress))
                             let rc = mdb_put(txn, dbi, &key, &value, 0); // MDB_NOOVERWRITE
-                            if (rc != 0) {
+                            if (rc == MDB_MAP_FULL) {
+                                throw DiomedeError.mapFullError
+                            } else if (rc != 0) {
                                 print("*** \(String(cString: mdb_strerror(rc)))")
                                 throw DiomedeError.insertError
                             }
@@ -751,7 +754,9 @@ public class Environment {
                         var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
                         var value = MDB_val(mv_size: vData.count, mv_data: UnsafeMutableRawPointer(mutating: vPtr.baseAddress))
                         let rc = mdb_put(txn, dbi, &key, &value, 0); // MDB_NOOVERWRITE
-                        if (rc != 0) {
+                        if (rc == MDB_MAP_FULL) {
+                            throw DiomedeError.mapFullError
+                        } else if (rc != 0) {
                             print("*** \(String(cString: mdb_strerror(rc)))")
                             throw DiomedeError.insertError
                         }
