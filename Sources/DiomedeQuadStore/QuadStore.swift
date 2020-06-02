@@ -970,6 +970,18 @@ extension DiomedeQuadStore {
     
 }
 
+private func humanReadable(count: Int) -> String {
+    var names = ["", "k", "m", "b"]
+    var unit = names.remove(at: 0)
+    var size = count
+    while !names.isEmpty && size >= 1024 {
+        unit = names.remove(at: 0)
+        size /= 1024
+    }
+    return "\(size)\(unit)"
+}
+
+
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
@@ -986,7 +998,7 @@ extension DiomedeQuadStore {
 //                    let elapsed = CFAbsoluteTimeGetCurrent() - start
 //                    let tps = Double(i) / elapsed
 //                    print("\(i) (\(tps) T/s)")
-//                    //                    print("\r\(i) (\(tps) t/s)", terminator: "")
+//                    //                    print("\r\(humanReadable(count: i))) (\(tps) t/s)", terminator: "")
 //                }
                 do {
                     var termIds = [Int]()
@@ -1013,6 +1025,12 @@ extension DiomedeQuadStore {
                     }
                     assert(termIds.count == 4)
                     quadIds.append(termIds)
+                } catch DiomedeError.mapFullError {
+                    print("Failed to load data.")
+                    throw DiomedeError.mapFullError
+                } catch DiomedeError.insertError {
+                    print("Failed to load data.")
+                    throw DiomedeError.insertError
                 } catch {}
             }
             
