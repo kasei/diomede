@@ -345,7 +345,32 @@ public class Environment {
                 return nil
             }
         }
+
+        public func unescapingIterator(handler: (Data, Data) throws -> ()) throws {
+            try self.env.read { (txn) throws -> Int in
+                var cursor: OpaquePointer?
+                var rc = mdb_cursor_open(txn, self.dbi, &cursor)
+                guard (rc == 0) else {
+                    throw DiomedeError.cursorOpenError(rc)
+                }
+                defer { mdb_cursor_close(cursor) }
+                
+                var key = MDB_val(mv_size: 0, mv_data: nil)
+                var data = MDB_val(mv_size: 0, mv_data: nil)
+                rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
+                while (rc == 0) {
+                    let keyData = Data(bytesNoCopy: key.mv_data, count: key.mv_size, deallocator: .none)
+                    let valueData = Data(bytesNoCopy: data.mv_data, count: data.mv_size, deallocator: .none)
+                    defer {
+                        rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                    }
+                    try handler(keyData, valueData)
+                }
+                return 0
+            }
+        }
         
+
         public func iterator<T>(handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
             var results = [T]()
             try self.env.read { (txn) throws -> Int in
@@ -464,6 +489,7 @@ public class Environment {
                     let element = handler(txn, keyData, valueData)
                     results.append(element)
                 }
+//                print("range get STOP [\(rc)]")
                 return 0
             }
             return AnyIterator(results.makeIterator())
@@ -474,6 +500,12 @@ public class Environment {
             let c = AnySequence { return i }
             for (k, v) in c {
                 try handler(k, v)
+            }
+        }
+
+        public func unescapingIterate(handler: (Data, Data) throws -> ()) throws {
+            try self.unescapingIterator {
+                try handler($0, $1)
             }
         }
 
