@@ -370,7 +370,7 @@ public struct DiomedeQuadStore {
         }
     }
     
-    func id(for term: Term) throws -> Int? {
+    public func id(for term: Term) throws -> Int? {
         let term_key = try term.sha256()
         var id : Int? = nil
         try self.env.read { (txn) -> Int in
@@ -806,8 +806,6 @@ extension DiomedeQuadStore {
 
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to QuadStoreProtocol,
-    // with the exception of results(matching:) which depends on the Kineo-specific TermResult type.
-    // It can be trivially wrapped around bindings(matching:).
     
     public typealias Version = UInt64
     public func effectiveVersion() throws -> Version? {
@@ -879,23 +877,23 @@ extension DiomedeQuadStore {
         return AnyIterator(results.makeIterator())
     }
     
-//    public func results(matching pattern: QuadPattern) throws -> AnyIterator<TermResult> {
-//        var bindings : [String: KeyPath<Quad, Term>] = [:]
-//        for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
-//            if case .variable(let name, binding: _) = node {
-//                bindings[name] = path
-//            }
-//        }
-//        let quads = try self.quads(matching: pattern)
-//        let results = quads.lazy.map { (q) -> TermResult in
-//            var b = [String: Term]()
-//            for (name, path) in bindings {
-//                b[name] = q[keyPath: path]
-//            }
-//            return TermResult(bindings: b)
-//        }
-//        return AnyIterator(results.makeIterator())
-//    }
+    public func results(matching pattern: QuadPattern) throws -> AnyIterator<SPARQLResultSolution<Term>> {
+        var bindings : [String: KeyPath<Quad, Term>] = [:]
+        for (node, path) in zip(pattern, QuadPattern.groundKeyPaths) {
+            if case .variable(let name, binding: _) = node {
+                bindings[name] = path
+            }
+        }
+        let quads = try self.quads(matching: pattern)
+        let results = quads.lazy.map { (q) -> SPARQLResultSolution<Term> in
+            var b = [String: Term]()
+            for (name, path) in bindings {
+                b[name] = q[keyPath: path]
+            }
+            return SPARQLResultSolution(bindings: b)
+        }
+        return AnyIterator(results.makeIterator())
+    }
 
     public func countQuads(matching pattern: QuadPattern) throws -> Int {
         
