@@ -4,17 +4,17 @@ import Diomede
 import DiomedeQuadStore
 import SPARQLSyntax
 
-func getCurrentTime() -> CFAbsoluteTime {
-    return CFAbsoluteTimeGetCurrent()
-}
-
-func time(_ name: String, block: () throws -> ()) rethrows {
-    let start = getCurrentTime()
-    try block()
-    let end = getCurrentTime()
-    let elapsed = end - start
-    print("[\(name)] Elapsed time: \(elapsed)s")
-}
+//func getCurrentTime() -> CFAbsoluteTime {
+//    return CFAbsoluteTimeGetCurrent()
+//}
+//
+//func time(_ name: String, block: () throws -> ()) rethrows {
+//    let start = getCurrentTime()
+//    try block()
+//    let end = getCurrentTime()
+//    let elapsed = end - start
+//    print("[\(name)] Elapsed time: \(elapsed)s")
+//}
 
 func humanReadable(bytes: Int) -> String{
     var names = [" bytes", "kB", "MB", "GB"]
@@ -487,7 +487,7 @@ if op == "stats" {
         q1.predicate = .bound(pred)
         q1.graph = .bound(graph)
         
-        try time("Estimated") {
+//        try time("Estimated") {
             var estimatedCardinality = 0.0
 //            for graph in qs.graphs() {
                 let dataset = try qs.characteristicSets(for: graph)
@@ -495,12 +495,12 @@ if op == "stats" {
                 estimatedCardinality += c1
 //            }
             print("Estimated: \(estimatedCardinality)")
-        }
+//        }
 
-        try time("Actual") {
+//        try time("Actual") {
             let actualCardinality = try qs.countQuads(matching: q1)
             print("Actual   : \(actualCardinality)")
-        }
+//        }
     } catch DiomedeError.indexError {
         print("No characteristic sets index found")
     }
