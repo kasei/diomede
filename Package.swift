@@ -17,6 +17,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/agisboye/CLMDB.git", from: "0.9.24"),
+		.package(name: "CryptoSwift", url: "https://github.com/krzyzanowskim/CryptoSwift.git", .upToNextMinor(from: "1.0.0")),
 		.package(name: "SPARQLSyntax", url: "https://github.com/kasei/swift-sparql-syntax.git", .upToNextMinor(from: "0.0.102")),
     ],
     targets: [
@@ -32,6 +33,7 @@ let package = Package(
             name: "DiomedeQuadStore",
             dependencies: [
             	"Diomede",
+            	"CryptoSwift",
             	"SPARQLSyntax"
             ]),
         .target(

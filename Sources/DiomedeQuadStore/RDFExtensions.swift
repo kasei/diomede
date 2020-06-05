@@ -6,14 +6,14 @@
 //
 
 import Foundation
-import CryptoKit
+import CryptoSwift
 import SPARQLSyntax
 import Diomede
 
 extension Term: DataEncodable {
     public func sha256() throws -> Data {
         let d = try self.asData()
-        let term_key = Data(SHA256.hash(data: d))
+        let term_key = d.sha256()
         return term_key
     }
 

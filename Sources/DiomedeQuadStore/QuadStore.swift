@@ -805,7 +805,7 @@ extension DiomedeQuadStore {
 }
 
 extension DiomedeQuadStore {
-    // These allow DiomedeQuadStore to conform to QuadStoreProtocol,
+    // These allow DiomedeQuadStore to conform to Kineo.QuadStoreProtocol,
     
     public typealias Version = UInt64
     public func effectiveVersion() throws -> Version? {

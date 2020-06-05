@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 import Diomede
 import DiomedeQuadStore
@@ -274,7 +273,7 @@ if op == "stats" {
         let key = Int.fromData(k)
         let value = try Term.fromData(v)
         
-        let term_hash = try Data(SHA256.hash(data: value.asData()))
+        let term_hash = try value.asData().sha256()
         print("\(key): \(value) (\(term_hash._hexValue))")
     }
 } else if op == "hashes" {
