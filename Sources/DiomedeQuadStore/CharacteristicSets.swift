@@ -19,7 +19,7 @@ struct JoinSelectivities {
 }
 
 public struct CharacteristicIDSet: Codable {
-    typealias TermID = Int
+    typealias TermID = UInt64
     var graph: TermID
     var count: Int
     var predCounts: [TermID: Int]
@@ -79,7 +79,7 @@ public struct CharacteristicSet: Codable {
 }
 
 public struct CharacteristicDataSet {
-    typealias TermID = Int
+    typealias TermID = UInt64
     var characteristicSets: [CharacteristicIDSet]
     var store: DiomedeQuadStore
 
@@ -109,7 +109,7 @@ public struct CharacteristicDataSet {
     
     static func generateCharacteristicSets_ordered(store: DiomedeQuadStore, using index: DiomedeQuadStore.IndexOrder, in graph: Term) throws -> [CharacteristicIDSet] {
         var characteristicSets = [CharacteristicIDSet]()
-        var lastSubject: Int? = nil
+        var lastSubject: TermID? = nil
         var triples = [[TermID]]()
         var counts = [Set<TermID>: Int]()
         var predCounts = [Set<TermID>: [TermID: Int]]()
@@ -222,7 +222,7 @@ public struct CharacteristicDataSet {
             }
         }
         
-        var termIds = [Int]()
+        var termIds = [UInt64]()
         try store.env.read { (txn) -> Int in
             for term in sq {
                 guard let id = try store.id(for: term, txn: txn) else {
@@ -317,8 +317,8 @@ extension DiomedeQuadStore {
             throw DiomedeError.nonExistentTermError
         }
 
-        let lower = [gid, 0].asData()
-        let upper = [(gid+1), 0].asData()
+        let lower = [Int(gid), 0].asData()
+        let upper = [Int(gid+1), 0].asData()
         
         var sets = [CharacteristicIDSet]()
         try index.iterate(between: lower, and: upper) { (k, v) in
@@ -331,7 +331,7 @@ extension DiomedeQuadStore {
             let count = values[0]
             values.removeFirst()
             let pairs = stride(from: 0, to: values.endIndex, by: 2).map {
-                (values[$0], values[$0.advanced(by: 1)])
+                (UInt64(values[$0]), values[$0.advanced(by: 1)])
             }
             let predCounts = Dictionary(uniqueKeysWithValues: pairs)
             let preds = Set(predCounts.keys)
@@ -378,11 +378,11 @@ extension DiomedeQuadStore {
             
             var pairs = [(Data, Data)]()
             for (i, cs) in sets.enumerated() {
-                let key = [gid, i]
+                let key = [Int(gid), i]
                 let keyData = key.asData()
                 var value = [cs.count]
                 for (pred, count) in cs.predCounts {
-                    value.append(contentsOf: [pred, count])
+                    value.append(contentsOf: [Int(pred), count])
                 }
                 let valueData = value.asData()
                 pairs.append((keyData, valueData))

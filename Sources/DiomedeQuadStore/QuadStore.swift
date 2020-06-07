@@ -224,16 +224,16 @@ public struct DiomedeQuadStore {
         return indexOrder
     }
 
-    public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
+    public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [UInt64]) throws -> [[UInt64]] {
         guard let (index, order) = self.fullIndexes[indexOrder] else {
             throw DiomedeError.indexError
         }
         //        print("using index \(indexOrder.rawValue) with order \(order)")
-        let empty = Array(repeating: 0, count: 4)
+        let empty = Array(repeating: UInt64(0), count: 4)
         let lower = Array((prefix + empty).prefix(4))
         var upper = lower
         if prefix.isEmpty {
-            var quadIds = [[Int]]()
+            var quadIds = [[UInt64]]()
             try index.iterate { (qidsData, _) in
                 var tids = Array<Int>(repeating: 0, count: 4)
                 let strideBy = qidsData.count / 4
@@ -242,17 +242,18 @@ public struct DiomedeQuadStore {
                     let tid = Int.fromData(data)
                     tids[pos] = tid
                 }
-                quadIds.append(tids)
+                let ids = tids.map { UInt64($0 )}
+                quadIds.append(ids)
             }
             return quadIds
         } else {
             upper[prefix.count - 1] += 1
-            let lowerKey = lower.asData()
-            let upperKey = upper.asData()
+            let lowerKey = lower.map { Int($0) }.asData()
+            let upperKey = upper.map { Int($0) }.asData()
             //        print("from \(lowerKey._hexValue)")
             //        print("to   \(upperKey._hexValue)")
             
-            var quadIds = [[Int]]()
+            var quadIds = [[UInt64]]()
             try index.iterate(between: lowerKey, and: upperKey) { (qidsData, _) in
                 var tids = Array<Int>(repeating: 0, count: 4)
                 let strideBy = qidsData.count / 4
@@ -261,7 +262,8 @@ public struct DiomedeQuadStore {
                     let tid = Int.fromData(data)
                     tids[pos] = tid
                 }
-                quadIds.append(tids)
+                let ids = tids.map { UInt64($0 )}
+                quadIds.append(ids)
             }
             return quadIds
         }
@@ -336,7 +338,8 @@ public struct DiomedeQuadStore {
         }
     }
 
-    public func term(from tid: Int) throws -> Term? {
+    public func term(from id: UInt64) throws -> Term? {
+        let tid = Int(id)
         if let tdata = try i2t_db.get(key: tid) {
             return try Term.fromData(tdata)
         } else {
@@ -369,16 +372,17 @@ public struct DiomedeQuadStore {
         }
     }
     
-    func id(for term: Term, txn: OpaquePointer) throws -> Int? {
+    func id(for term: Term, txn: OpaquePointer) throws -> UInt64? {
         let term_key = try term.sha256()
         if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
-            return Int.fromData(eid)
+            let tid = Int.fromData(eid)
+            return UInt64(tid)
         } else {
             return nil
         }
     }
     
-    public func id(for term: Term) throws -> Int? {
+    public func id(for term: Term) throws -> UInt64? {
         let term_key = try term.sha256()
         var id : Int? = nil
         try self.env.read { (txn) -> Int in
@@ -387,7 +391,7 @@ public struct DiomedeQuadStore {
             }
             return 0
         }
-        return id
+        return id.map { UInt64($0) }
     }
 }
 
@@ -436,16 +440,18 @@ extension DiomedeQuadStore {
     }
     
     public func namedGraphs() throws -> AnyIterator<Term> {
-        var termIds = [Int]()
+        var termIds = [UInt64]()
         try self.graphs_db.iterate(handler: { (data, _) in
             let tid = Int.fromData(data)
-            termIds.append(tid)
+            let id = UInt64(tid)
+            termIds.append(id)
         })
         
         return self.termIterator(fromIds: termIds)
     }
 
-    public func quadsIterator(fromIds ids: [[Int]]) -> AnyIterator<Quad> {
+    public func quadsIterator(fromIds uids: [[UInt64]]) -> AnyIterator<Quad> {
+        let ids = uids.map { $0.map { Int($0) } }
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         let chunkSize = 1024
 
@@ -491,8 +497,8 @@ extension DiomedeQuadStore {
         return AnyIterator(quads.makeIterator())
     }
     
-    func termIterator(fromIds ids: [Int]) -> AnyIterator<Term> {
-        let cache = LRUCache<Int, Term>(capacity: 4_096)
+    func termIterator(fromIds ids: [UInt64]) -> AnyIterator<Term> {
+        let cache = LRUCache<UInt64, Term>(capacity: 4_096)
         let chunkSize = 1024
 
         var termIds = ids
@@ -529,10 +535,11 @@ extension DiomedeQuadStore {
     }
     
     public func quadsIterator() throws -> AnyIterator<Quad> {
-        var quadIds = [[Int]]()
+        var quadIds = [[UInt64]]()
         try self.quads_db.iterate(handler: { (_, value) in
             let tids = [Int].fromData(value)
-            quadIds.append(tids)
+            let ids = tids.map { UInt64($0) }
+            quadIds.append(ids)
         })
         
         return self.quadsIterator(fromIds: quadIds)
@@ -543,7 +550,7 @@ extension DiomedeQuadStore {
         pattern.graph = .bound(graph)
         
         var bestIndex: IndexOrder? = nil
-        var prefix = [Int]()
+        var prefix = [UInt64]()
         do {
             try self.env.read { (txn) -> Int in
                 let boundPositions : Set<Int> = [3]
@@ -561,7 +568,8 @@ extension DiomedeQuadStore {
                         guard let tid = try self.id(for: term, txn: txn) else {
                             throw DiomedeError.nonExistentTermError
                         }
-                        prefix.append(tid)
+                        let id = UInt64(tid)
+                        prefix.append(id)
                     }
                 }
                 return 0
@@ -573,11 +581,12 @@ extension DiomedeQuadStore {
         if let index = bestIndex {
             if !prefix.isEmpty {
                 let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
-                var termIds = Set<Int>()
+                var termIds = Set<UInt64>()
                 for tids in quadIds {
                     for pos in positions {
                         let tid = tids[pos]
-                        termIds.insert(tid)
+                        let id = UInt64(tid)
+                        termIds.insert(id)
                     }
                 }
                 
@@ -597,14 +606,15 @@ extension DiomedeQuadStore {
 
 //        print("finding graph terms for gid \(gid)")
 
-        var quadIds = [[Int]]()
+        var quadIds = [[UInt64]]()
         try self.quads_db.iterate(handler: { (_, value) in
             let tids = [Int].fromData(value)
             guard tids.count == 4 else { return }
             guard tids[3] == gid else { return }
-            quadIds.append(tids)
+            let ids = tids.map { UInt64($0) }
+            quadIds.append(ids)
         })
-        var termIds = Set<Int>()
+        var termIds = Set<UInt64>()
         for tids in quadIds {
             for pos in positions {
                 let tid = tids[pos]
@@ -615,11 +625,11 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: Array(termIds))
     }
 
-    public func quadIds(matching pattern: QuadPattern) throws -> [[Int]] {
+    public func quadIds(matching pattern: QuadPattern) throws -> [[UInt64]] {
 //        print("matching: \(pattern)")
         var bestIndex: IndexOrder? = nil
-        var prefix = [Int]()
-        var restrictions = [Int: Int]()
+        var prefix = [UInt64]()
+        var restrictions = [Int: UInt64]()
         do {
             try self.env.read { (txn) -> Int in
                 var boundPositions = Set<Int>()
@@ -646,7 +656,8 @@ extension DiomedeQuadStore {
                         guard let tid = try self.id(for: term, txn: txn) else {
                             throw DiomedeError.nonExistentTermError
                         }
-                        prefix.append(tid)
+                        let id = UInt64(tid)
+                        prefix.append(id)
                     }
                 }
                 return 0
@@ -658,7 +669,7 @@ extension DiomedeQuadStore {
         if let index = bestIndex {
 //            print("using index \(index.rawValue)")
             let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
-            return quadIds.filter { (tids) -> Bool in
+            let filtered = quadIds.filter { (tids) -> Bool in
                 for (i, value) in restrictions {
                     if tids[i] != value {
                         return false
@@ -666,6 +677,7 @@ extension DiomedeQuadStore {
                 }
                 return true
             }
+            return filtered.map { $0.map { UInt64($0) } }
         } else {
             var quadIds = [[Int]]()
             try self.quads_db.iterate { (_, spog) in
@@ -677,7 +689,7 @@ extension DiomedeQuadStore {
                 }
                 quadIds.append(tids)
             }
-            return quadIds
+            return quadIds.map { $0.map { UInt64($0) } }
         }
     }
 
@@ -806,7 +818,7 @@ extension DiomedeQuadStore {
         return try self.iterateQuads(txn: txn, usingIndex: indexOrder, handler: handler)
     }
 
-    public func _private_quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [Int]) throws -> [[Int]] {
+    public func _private_quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [UInt64]) throws -> [[UInt64]] {
         return try self.quadIds(usingIndex: indexOrder, withPrefix: prefix)
     }
     
@@ -904,15 +916,9 @@ extension DiomedeQuadStore {
     }
 
     public func countQuads(matching pattern: QuadPattern) throws -> Int {
-        
-        
-        
-        
-        
-        
         var bestIndex: IndexOrder? = nil
-        var prefix = [Int]()
-        var restrictions = [Int: Int]()
+        var prefix = [UInt64]()
+        var restrictions = [Int: UInt64]()
         var boundPositions = Set<Int>()
         do {
             try self.env.read { (txn) -> Int in
@@ -953,12 +959,12 @@ extension DiomedeQuadStore {
             guard let (index, _) = self.fullIndexes[indexOrder] else {
                 throw DiomedeError.indexError
             }
-            let empty = Array(repeating: 0, count: 4)
+            let empty = Array(repeating: UInt64(0), count: 4)
             let lower = Array((prefix + empty).prefix(4))
             var upper = lower
             upper[prefix.count - 1] += 1
-            let lowerKey = lower.asData()
-            let upperKey = upper.asData()
+            let lowerKey = lower.map { Int($0) }.asData()
+            let upperKey = upper.map { Int($0) }.asData()
             let count = try index.count(between: lowerKey, and: upperKey, inclusive: false)
 //            print("-> \(count)")
             return count

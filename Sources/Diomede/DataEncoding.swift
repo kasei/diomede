@@ -55,6 +55,24 @@ extension Array: DataEncodable where Element == Int {
     }
 }
 
+extension UInt64 : DataEncodable {
+    public func asData() -> Data {
+        var be = self.bigEndian
+        return Data(bytes: &be, count: 8)
+    }
+    public static func fromData(_ data: Data) -> Self {
+        var be: UInt64 = 0
+        withUnsafeMutableBytes(of: &be) { bePtr in
+            data.withUnsafeBytes {
+                bePtr.baseAddress?.copyMemory(from: $0, byteCount: 8)
+            }
+        }
+
+//        let be: Int64 = data.withUnsafeBytes { $0.load(as: Int64.self) }
+        return UInt64(bigEndian: be)
+    }
+}
+
 extension Int : DataEncodable {
     public func asData() -> Data {
         var be = Int64(self).bigEndian
