@@ -336,6 +336,14 @@ public struct DiomedeQuadStore {
         }
     }
 
+    public func term(from tid: Int) throws -> Term? {
+        if let tdata = try i2t_db.get(key: tid) {
+            return try Term.fromData(tdata)
+        } else {
+            return nil
+        }
+    }
+
     func iterateQuads(txn: OpaquePointer, usingIndex indexOrder: IndexOrder, handler: (Quad) throws -> ()) throws {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         try iterateQuadIds(txn: txn, usingIndex: indexOrder) { (qid, tids) throws in
@@ -437,7 +445,7 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: termIds)
     }
 
-    func quadsIterator(fromIds ids: [[Int]]) -> AnyIterator<Quad> {
+    public func quadsIterator(fromIds ids: [[Int]]) -> AnyIterator<Quad> {
         let cache = LRUCache<Int, Term>(capacity: 4_096)
         let chunkSize = 1024
 
@@ -607,7 +615,7 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: Array(termIds))
     }
 
-    func quadIds(matching pattern: QuadPattern) throws -> [[Int]] {
+    public func quadIds(matching pattern: QuadPattern) throws -> [[Int]] {
 //        print("matching: \(pattern)")
         var bestIndex: IndexOrder? = nil
         var prefix = [Int]()
