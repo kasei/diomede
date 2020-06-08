@@ -73,16 +73,17 @@ public struct QuadID: DataEncodable {
             let values = bp.map { UInt64(bigEndian: $0) }
             return values
         }
-        
-        let a = UInt64.fromData(data)
-        let b = UInt64.fromData(data[8...])
-        let c = UInt64.fromData(data[16...])
-        let d = UInt64.fromData(data[24...])
-        
-        print("+ \(values)")
-        print("- \([a,b,c,d])")
-        
-        return QuadID(a: a, b: b, c: c, d: d)
+        return QuadID(a: values[0], b: values[1], c: values[2], d: values[3])
+//        
+//        let a = UInt64.fromData(data)
+//        let b = UInt64.fromData(data[8...])
+//        let c = UInt64.fromData(data[16...])
+//        let d = UInt64.fromData(data[24...])
+//
+//        print("+ \(values)")
+//        print("- \([a,b,c,d])")
+//
+//        return QuadID(a: a, b: b, c: c, d: d)
     }
 }
 
