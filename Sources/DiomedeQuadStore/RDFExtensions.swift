@@ -62,8 +62,9 @@ extension Term: DataEncodable {
         case "i":
             return Term(value: value, type: .datatype(.integer))
         case "D":
-            let dt = String(s.dropFirst(1).prefix(while: { $0 != "\"" }))
-            return Term(value: value, type: .datatype(.custom(dt)))
+            let dtvalue = String(s.dropFirst(1).prefix(while: { $0 != "\"" }))
+            let dt = TermDataType(stringLiteral: dtvalue)
+            return Term(value: value, type: .datatype(dt))
         default:
             throw DiomedeError.unknownError
         }
