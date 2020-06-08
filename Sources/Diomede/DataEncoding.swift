@@ -35,6 +35,47 @@ extension Data {
     }
 }
 
+public struct QuadID: DataEncodable {
+    public var a: UInt64
+    public var b: UInt64
+    public var c: UInt64
+    public var d: UInt64
+
+    public var values: [UInt64] {
+        return [a, b, c, d]
+    }
+    
+    public subscript(_ i: Int) -> UInt64 {
+        switch i {
+        case 0:
+            return a
+        case 1:
+            return b
+        case 2:
+            return c
+        default:
+            return d
+        }
+    }
+    
+    public func asData() -> Data {
+        let data = [a, b, c, d].map { $0.asData() }
+        let combined = data.reduce(Data(), { $0 + $1 })
+        return combined
+    }
+    public static func fromData(_ data: Data) throws -> Self {
+        guard data.count == 32 else {
+            throw DiomedeError.encodingError
+        }
+        
+        let a = UInt64.fromData(data)
+        let b = UInt64.fromData(data[8...])
+        let c = UInt64.fromData(data[16...])
+        let d = UInt64.fromData(data[24...])
+        return QuadID(a: a, b: b, c: c, d: d)
+    }
+}
+
 extension Array: DataEncodable where Element == Int {
     public func asData() -> Data {
         let data = self.map { $0.asData() }

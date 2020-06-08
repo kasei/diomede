@@ -679,9 +679,10 @@ extension DiomedeQuadStore {
             }
             return filtered.map { $0.map { UInt64($0) } }
         } else {
-            var quadIds = [[Int]]()
+            print("using quadids")
+            var quadIds = [QuadID]()
             try self.quads_db.iterate { (_, spog) in
-                let tids = [Int].fromData(spog)
+                let tids = try QuadID.fromData(spog)
                 for (i, value) in restrictions {
                     if tids[i] != value {
                         return
@@ -689,7 +690,7 @@ extension DiomedeQuadStore {
                 }
                 quadIds.append(tids)
             }
-            return quadIds.map { $0.map { UInt64($0) } }
+            return quadIds.map { $0.values }
         }
     }
 
