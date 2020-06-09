@@ -332,6 +332,10 @@ if op == "stats" {
         print("Dropping Characteristic Sets index")
         try qs.dropCharacteristicSets()
     } else {
+        if availableQuadIndexes.count == 1 {
+            print("WARNING: Insert performance will degrade as a result of removing the only remaining quad index.")
+        }
+        
         guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
             throw DiomedeError.indexError
         }
