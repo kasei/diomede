@@ -1169,6 +1169,12 @@ extension DiomedeQuadStore {
                         }
                     }
                     assert(termIds.count == 4)
+                    
+                    // if newTerms == 0, all the terms in this quad were already in the database,
+                    // and so we need to check below if this quad is already in the quads table
+                    // (and indexes) and prevent it from being inserted twice.
+                    // if newTerms > 0, then it necessarily can't be in the quads table or indexes
+                    // because at least one term ID did not exist until just now.
                     quadIds_verifyUnique[termIds] = (newTerms == 0)
                 } catch DiomedeError.mapFullError {
                     print("Failed to load data.")
@@ -1189,7 +1195,7 @@ extension DiomedeQuadStore {
             let quadIds = try quadIds_verifyUnique.filter { (pair) throws -> Bool in
                 if pair.value {
                     let tids = pair.key.map { UInt64($0) }
-                    let exists = try !self.quadExists(withIds: tids)
+                    let exists = try self.quadExists(withIds: tids)
                     if exists {
                         print("*** quad alread exits in the database: \(tids)")
                     }
