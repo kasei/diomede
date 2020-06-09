@@ -132,32 +132,26 @@ public struct DiomedeQuadStore {
                     print("*** Failed to construct new LMDB Environment")
                     return nil
                 }
-                
+
+                let now = ISO8601DateFormatter().string(from: Date.init())
+                let defaultIndex = IndexOrder.gpso
+
                 try e.write { (txn) -> Int in
                     try e.createDatabase(txn: txn, named: StaticDatabases.quads.rawValue)
-                    try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue)
-                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.term_to_id.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.id_to_term.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.graphs.rawValue)
-//                    try e.createDatabase(txn: txn, named: "spog")
-//                    try e.createDatabase(txn: txn, named: "gpso")
-                    let stats = e.database(txn: txn, named: StaticDatabases.stats.rawValue)!
-//                    let indexes = e.database(txn: txn, named: StaticDatabases.fullIndexes.rawValue)!
-//                    try indexes.insert(uniqueKeysWithValues: [
-//                        ("spog", [0,1,2,3]),
-//                        ("gpso", [3,1,0,2])
-//                    ])
-                    
-                    let now = ISO8601DateFormatter().string(from: Date.init())
-                    try stats.insert(txn: txn, uniqueKeysWithValues: [
-                        ("Diomede-Version", "0.0.13"),
-                        ("meta", ""),
-                        ("Last-Modified", now)
+                    try e.createDatabase(txn: txn, named: defaultIndex.rawValue)
+                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, with: [
+                        (defaultIndex.rawValue, [3,1,0,2])
                     ])
-                    try stats.insert(txn: txn, uniqueKeysWithValues: [
-                        (NextIDKey.term.rawValue, 1),
-                        (NextIDKey.quad.rawValue, 1),
+                    
+                    try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, with: [
+                        ("Diomede-Version", "0.0.13".asData()),
+                        ("meta", "".asData()),
+                        ("Last-Modified", now.asData()),
+                        (NextIDKey.term.rawValue, 1.asData()),
+                        (NextIDKey.quad.rawValue, 1.asData()),
                     ])
                     return 0
                 }
