@@ -283,19 +283,20 @@ public struct DiomedeQuadStore {
                 try handler(qid, tids)
             }
             
-            try index.iterate(txn: txn, handler: iterationHandler)
+            try index.unescapingIterate(txn: txn, handler: iterationHandler)
         } else {
             // no index given, just use the quads table
-            try self.quads_db.iterate(txn: txn) { (qidData, qidsData) in
+            try self.quads_db.unescapingIterate(txn: txn) { (qidData, qidsData) in
                 let qid = Int.fromData(qidData)
-                var tids = [Int]()
-                let strideBy = qidsData.count / 4
-                for i in stride(from: 0, to: qidsData.count, by: strideBy) {
-                    let data = qidsData[i..<(i+strideBy)]
-                    let tid = Int.fromData(data)
-                    tids.append(tid)
-                }
-                try handler(qid, tids)
+                let tids = try QuadID.fromData(qidsData)
+//                var tids = [Int]()
+//                let strideBy = qidsData.count / 4
+//                for i in stride(from: 0, to: qidsData.count, by: strideBy) {
+//                    let data = qidsData[i..<(i+strideBy)]
+//                    let tid = Int.fromData(data)
+//                    tids.append(tid)
+//                }
+                try handler(qid, tids.values.map { Int($0) })
             }
         }
     }
@@ -404,24 +405,26 @@ extension DiomedeQuadStore {
         let indexName = indexOrder.rawValue
         let order = indexOrder.order()
 
-        var quadIds = [(Int, [Int])]()
+        var quadIds = [(Data, Int)]()
+        print("loading and re-ordering quad terms to match index order")
         try self.read { (txn) throws -> Int in
             try self.iterateQuadIds(txn: txn) { (qid, tids) in
-                quadIds.append((qid, tids))
+                let indexOrderedValue = order.map({ tids[$0].asData() }).reduce(Data()) { $0 + $1 }
+                quadIds.append((indexOrderedValue, qid))
             }
             return 0
         }
-
         
-        var indexOrderedPairs = [(Data, Int)]()
-        for (qid, tids) in quadIds {
-            let indexOrderedKey = order.map({ tids[$0].asData() }).reduce(Data()) { $0 + $1 }
-            indexOrderedPairs.append((indexOrderedKey, qid))
+        print("sorting quads")
+        quadIds.sort { (a, b) -> Bool in
+            return a.0.lexicographicallyPrecedes(b.0)
         }
+        
         try self.write { (txn) -> Int in
-            try self.env.createDatabase(txn: txn, named: indexName)
-            let index = self.env.database(txn: txn, named: indexName)!
-            try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
+            print("bulk loading new index")
+            try self.env.createDatabase(txn: txn, named: indexName, with: quadIds)
+//            let index = self.env.database(txn: txn, named: indexName)!
+//            try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
             try self.indexes_db.insert(txn: txn, uniqueKeysWithValues: [
                 (indexName, order),
             ])
@@ -625,6 +628,70 @@ extension DiomedeQuadStore {
         return self.termIterator(fromIds: Array(termIds))
     }
 
+    public func quadExists(withIds match_tids: [UInt64]) throws -> Bool {
+        var bestIndex: IndexOrder? = nil
+        var prefix = [UInt64]()
+        var restrictions = [Int: UInt64]()
+        do {
+            try self.env.read { (txn) -> Int in
+                for i in 0..<4 {
+                    restrictions[i] = match_tids[i]
+                }
+                let boundPositions = Set<Int>(0..<4)
+                if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
+                    bestIndex = index
+                    //                print("Best index order is \(index.rawValue)")
+                    let order = index.order()
+                    
+                    for i in order {
+                        let tid = match_tids[i]
+                        prefix.append(tid)
+                    }
+                }
+                return 0
+            }
+        } catch DiomedeError.nonExistentTermError {
+            return false
+        }
+
+        var seen = false
+        do {
+            if let indexOrder = bestIndex {
+                guard let (index, order) = self.fullIndexes[indexOrder] else {
+                    throw DiomedeError.indexError
+                }
+                let empty = Array(repeating: UInt64(0), count: 4)
+                let lower = Array((prefix + empty).prefix(4))
+                var upper = lower
+                upper[prefix.count - 1] += 1
+                let lowerKey = lower.map { Int($0) }.asData()
+                let upperKey = upper.map { Int($0) }.asData()
+                
+                try index.iterate(between: lowerKey, and: upperKey) { (qidsData, _) in
+                    let qids = try QuadID.fromData(qidsData)
+                    var tids = Array<UInt64>(repeating: 0, count: 4)
+                    for (pos, tid) in zip(order, qids.values) {
+                        tids[pos] = tid
+                    }
+                    if tids == match_tids {
+                        seen = true
+                        throw DiomedeError.getError
+                    }
+                }
+            } else {
+                try self.quads_db.unescapingIterate { (_, spog) in
+                    let qid = try QuadID.fromData(spog)
+                    let tids = qid.values
+                    if tids == match_tids {
+                        seen = true
+                        throw DiomedeError.getError
+                    }
+                }
+            }
+        } catch {}
+        return seen
+    }
+    
     public func quadIds(matching pattern: QuadPattern) throws -> [[UInt64]] {
 //        print("matching: \(pattern)")
         var bestIndex: IndexOrder? = nil
@@ -708,6 +775,70 @@ extension DiomedeQuadStore {
     public func touch() throws {
         try self.write { (_) -> Int in
             return 0
+        }
+    }
+}
+
+public enum DiomedeQuadStoreError: Error {
+    case uniqueConstraintError(String)
+    case countError(String)
+    case indexError(String)
+}
+
+extension DiomedeQuadStore {
+    public func verify() throws {
+        var seen = [QuadID: Int]()
+
+        print("Verifying quads table ...")
+        try self.env.read { (txn) -> Int in
+            var i = 0
+            try self.quads_db.unescapingIterate(txn: txn) { (qidData, qidsData) in
+                i += 1
+                if i % 1000 == 0 {
+                    print("\r\(i)", terminator: "")
+                }
+                let qid = Int.fromData(qidData)
+                let tids = try QuadID.fromData(qidsData)
+                if let q = seen[tids] {
+                    throw DiomedeQuadStoreError.uniqueConstraintError("Quads table has non-unique quad (\(q), \(qid)): \(tids.values)")
+                }
+                seen[tids] = qid
+            }
+            print("\r", terminator: "")
+            return 0
+        }
+        
+        print("Verifying counts ...")
+        let quads = self.count
+        if quads != seen.count {
+            throw DiomedeQuadStoreError.countError("Count is invalid (\(quads) <=> \(seen.count))")
+        }
+        
+        print("Verifying indexes ...")
+        for (indexOrder, pair) in self.fullIndexes {
+            let (index, order) = pair
+            print("- \(indexOrder.rawValue) ...")
+            let entries = try index.count()
+            if quads != entries {
+                throw DiomedeQuadStoreError.countError("Index \(indexOrder.rawValue) has invalid count (\(entries) <=> \(quads))")
+            }
+            
+            try index.unescapingIterator { (key, value) in
+                let indexQid = Int.fromData(value)
+                let indexOrderedIDs = try QuadID.fromData(key)
+                var tids = Array<UInt64>(repeating: 0, count: 4)
+                for (pos, tid) in zip(order, indexOrderedIDs.values) {
+                    tids[pos] = tid
+                }
+                let q = QuadID(tids[0], tids[1], tids[2], tids[3])
+                if let qid = seen[q] {
+                    if indexQid != qid {
+                        throw DiomedeQuadStoreError.indexError("Index \(indexOrder.rawValue) has wrong Quad identifier value for \(q.values): \(indexQid) <=> \(qid)")
+                    }
+                } else {
+                    throw DiomedeQuadStoreError.indexError("Index \(indexOrder.rawValue) contains a non-existent quad: \(q.values)")
+                }
+            }
         }
     }
 }
@@ -1003,7 +1134,7 @@ extension DiomedeQuadStore {
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
-            var quadIds = [[Int]]()
+            var quadIds_verifyUnique = [[Int]: Bool]()
             var terms = Set<Term>()
             for (i, q) in quads.enumerated() {
 //                if i % 10000 == 0 {
@@ -1014,6 +1145,7 @@ extension DiomedeQuadStore {
 //                }
                 do {
                     var termIds = [Int]()
+                    var newTerms = 0
                     for (i, t) in q.enumerated() {
                         terms.insert(t)
                         let d = try t.asData()
@@ -1022,6 +1154,7 @@ extension DiomedeQuadStore {
                         if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
                             tid = Int.fromData(eid)
                         } else {
+                            newTerms += 1
                             tid = next_term_id
                             let i2t_pair = (tid, d)
                             let t2i_pair = (term_key, tid)
@@ -1036,7 +1169,7 @@ extension DiomedeQuadStore {
                         }
                     }
                     assert(termIds.count == 4)
-                    quadIds.append(termIds)
+                    quadIds_verifyUnique[termIds] = (newTerms == 0)
                 } catch DiomedeError.mapFullError {
                     print("Failed to load data.")
                     throw DiomedeError.mapFullError
@@ -1053,6 +1186,18 @@ extension DiomedeQuadStore {
                 (NextIDKey.term.rawValue, next_term_id),
             ])
 
+            let quadIds = try quadIds_verifyUnique.filter { (pair) throws -> Bool in
+                if pair.value {
+                    let tids = pair.key.map { UInt64($0) }
+                    let exists = try !self.quadExists(withIds: tids)
+                    if exists {
+                        print("*** quad alread exits in the database: \(tids)")
+                    }
+                    return !exists
+                } else {
+                    return true
+                }
+            }.map { $0.key }
             let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
             let emptyValue = Data()
             

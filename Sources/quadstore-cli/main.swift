@@ -421,6 +421,12 @@ if op == "stats" {
         return 0
     }
     
+} else if op == "verify" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        print("Failed to construct quadstore")
+        exit(1)
+    }
+    try qs.verify()
 } else if op == "cs" {
     guard let qs = DiomedeQuadStore(path: path) else {
         print("Failed to construct quadstore")

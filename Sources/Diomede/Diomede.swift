@@ -178,6 +178,15 @@ public class Environment {
         }
     }
     
+    public func createDatabase<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, named name: String, with keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
+        var dbi: MDB_dbi = 0
+        if (mdb_dbi_open(txn, name, UInt32(MDB_CREATE), &dbi) != 0) {
+            throw DiomedeError.databaseOpenError
+        }
+        let d = Database(environment: self, name: name, dbi: dbi)
+        try d.bulkInsert(txn: txn, uniqueKeysWithValues: keysAndValues)
+    }
+    
     public func dropDatabase(txn: OpaquePointer, named name: String) throws {
         guard let db = self.database(named: name) else {
             throw DiomedeError.databaseOpenError
@@ -289,6 +298,12 @@ public class Environment {
             return "Database(\(self.dbi))"
         }
         
+        init(environment: Environment, name: String, dbi: MDB_dbi) {
+            self.env = environment
+            self.name = name
+            self.dbi = dbi
+        }
+        
         init?(txn: OpaquePointer, environment: Environment, name: String) {
             self.env = environment
             self.name = name
@@ -346,31 +361,34 @@ public class Environment {
             }
         }
 
+        public func unescapingIterator(txn: OpaquePointer, handler: (Data, Data) throws -> ()) throws {
+            var cursor: OpaquePointer?
+            var rc = mdb_cursor_open(txn, self.dbi, &cursor)
+            guard (rc == 0) else {
+                throw DiomedeError.cursorOpenError(rc)
+            }
+            defer { mdb_cursor_close(cursor) }
+            
+            var key = MDB_val(mv_size: 0, mv_data: nil)
+            var data = MDB_val(mv_size: 0, mv_data: nil)
+            rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
+            while (rc == 0) {
+                let keyData = Data(bytesNoCopy: key.mv_data, count: key.mv_size, deallocator: .none)
+                let valueData = Data(bytesNoCopy: data.mv_data, count: data.mv_size, deallocator: .none)
+                defer {
+                    rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
+                }
+                try handler(keyData, valueData)
+            }
+        }
+        
         public func unescapingIterator(handler: (Data, Data) throws -> ()) throws {
             try self.env.read { (txn) throws -> Int in
-                var cursor: OpaquePointer?
-                var rc = mdb_cursor_open(txn, self.dbi, &cursor)
-                guard (rc == 0) else {
-                    throw DiomedeError.cursorOpenError(rc)
-                }
-                defer { mdb_cursor_close(cursor) }
-                
-                var key = MDB_val(mv_size: 0, mv_data: nil)
-                var data = MDB_val(mv_size: 0, mv_data: nil)
-                rc = mdb_cursor_get(cursor, &key, &data, MDB_FIRST)
-                while (rc == 0) {
-                    let keyData = Data(bytesNoCopy: key.mv_data, count: key.mv_size, deallocator: .none)
-                    let valueData = Data(bytesNoCopy: data.mv_data, count: data.mv_size, deallocator: .none)
-                    defer {
-                        rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)
-                    }
-                    try handler(keyData, valueData)
-                }
+                try self.unescapingIterator(txn: txn, handler: handler)
                 return 0
             }
         }
         
-
         public func iterator<T>(handler: @escaping (OpaquePointer, Data, Data) -> T) throws -> AnyIterator<T> {
             var results = [T]()
             try self.env.read { (txn) throws -> Int in
@@ -505,6 +523,12 @@ public class Environment {
 
         public func unescapingIterate(handler: (Data, Data) throws -> ()) throws {
             try self.unescapingIterator {
+                try handler($0, $1)
+            }
+        }
+
+        public func unescapingIterate(txn: OpaquePointer, handler: (Data, Data) throws -> ()) throws {
+            try self.unescapingIterator(txn: txn) {
                 try handler($0, $1)
             }
         }
@@ -746,6 +770,38 @@ public class Environment {
                 }
             }
             return result
+        }
+        
+        public func bulkInsert<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, uniqueKeysWithValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
+            var cursor: OpaquePointer?
+            var rc = mdb_cursor_open(txn, dbi, &cursor)
+            guard (rc == 0) else {
+                throw DiomedeError.cursorOpenError(rc)
+            }
+            defer { mdb_cursor_close(cursor) }
+            
+            var key = MDB_val(mv_size: 0, mv_data: nil)
+            var value = MDB_val(mv_size: 0, mv_data: nil)
+            
+            print("bulk load...")
+            for (k, v) in keysAndValues {
+                let kData = try k.asData()
+                let vData = try v.asData()
+                try kData.withUnsafeBytes { (kPtr) in
+                    try vData.withUnsafeBytes { (vPtr) in
+                        var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
+                        var value = MDB_val(mv_size: vData.count, mv_data: UnsafeMutableRawPointer(mutating: vPtr.baseAddress))
+//                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
+                        let rc = mdb_cursor_put(cursor, &key, &value, UInt32(MDB_APPEND))
+                        if (rc != 0) {
+                            print("*** \(String(cString: mdb_strerror(rc)))")
+                            print("key: \(kData._hexValue)")
+                            print("value: \(vData._hexValue)")
+                            throw DiomedeError.insertError
+                        }
+                    }
+                }
+            }
         }
         
         public func insert<S, K: DataEncodable, V: DataEncodable>(uniqueKeysWithValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {

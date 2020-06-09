@@ -35,12 +35,18 @@ extension Data {
     }
 }
 
-public struct QuadID: DataEncodable {
+public struct QuadID: Hashable, Comparable, DataEncodable {
     public var a: UInt64
     public var b: UInt64
     public var c: UInt64
     public var d: UInt64
 
+    public init(_ a: UInt64, _ b: UInt64, _ c: UInt64, _ d: UInt64) {
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+    }
     public var values: [UInt64] {
         return [a, b, c, d]
     }
@@ -77,7 +83,11 @@ public struct QuadID: DataEncodable {
                 UInt64(bigEndian: bp[3]),
             ]
         }
-        return QuadID(a: values[0], b: values[1], c: values[2], d: values[3])
+        return QuadID(values[0], values[1], values[2], values[3])
+    }
+
+    public static func < (lhs: QuadID, rhs: QuadID) -> Bool {
+        return lhs.values.lexicographicallyPrecedes(rhs.values)
     }
 }
 
