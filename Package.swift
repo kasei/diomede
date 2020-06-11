@@ -14,6 +14,12 @@ let package = Package(
         .library(
             name: "DiomedeQuadStore",
             targets: ["DiomedeQuadStore"]),
+        .executable(
+        	name: "diomede-db-util",
+        	targets: ["diomede-db-util"]),
+        .executable(
+        	name: "diomede",
+        	targets: ["diomede-cli"]),
     ],
     dependencies: [
         .package(url: "https://github.com/agisboye/CLMDB.git", from: "0.9.24"),
@@ -37,11 +43,11 @@ let package = Package(
             	"SPARQLSyntax"
             ]),
         .target(
-            name: "diomede-cli",
+            name: "diomede-db-util",
             dependencies: ["Diomede"]
         ),
         .target(
-            name: "quadstore-cli",
+            name: "diomede-cli",
             dependencies: ["DiomedeQuadStore"]
         ),
         .testTarget(
