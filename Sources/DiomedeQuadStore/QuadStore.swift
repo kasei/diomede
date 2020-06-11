@@ -1191,7 +1191,7 @@ extension DiomedeQuadStore {
                     let tids = pair.key.map { UInt64($0) }
                     let exists = try self.quadExists(withIds: tids)
                     if exists {
-                        print("*** quad alread exits in the database: \(tids)")
+//                        print("*** quad alread exits in the database: \(tids)")
                     }
                     return !exists
                 } else {

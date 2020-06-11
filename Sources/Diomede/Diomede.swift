@@ -785,14 +785,14 @@ public class Environment {
             
 //            print("bulk load...")
             for (k, v) in keysAndValues {
-                print("inserting key: \(k)")
+//                print("inserting key: \(k)")
                 let kData = try k.asData()
                 let vData = try v.asData()
                 try kData.withUnsafeBytes { (kPtr) in
                     try vData.withUnsafeBytes { (vPtr) in
                         var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
                         var value = MDB_val(mv_size: vData.count, mv_data: UnsafeMutableRawPointer(mutating: vPtr.baseAddress))
-                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
+//                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
                         let rc = mdb_cursor_put(cursor, &key, &value, UInt32(MDB_APPEND))
                         if (rc != 0) {
                             print("*** \(String(cString: mdb_strerror(rc)))")
