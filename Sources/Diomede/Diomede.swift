@@ -774,15 +774,14 @@ public class Environment {
         
         public func bulkInsert<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, uniqueKeysWithValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
             var cursor: OpaquePointer?
-            var rc = mdb_cursor_open(txn, dbi, &cursor)
+            let rc = mdb_cursor_open(txn, dbi, &cursor)
             guard (rc == 0) else {
                 throw DiomedeError.cursorOpenError(rc)
             }
             defer { mdb_cursor_close(cursor) }
             
-            var key = MDB_val(mv_size: 0, mv_data: nil)
-            var value = MDB_val(mv_size: 0, mv_data: nil)
-            
+//            var key = MDB_val(mv_size: 0, mv_data: nil)
+//            var value = MDB_val(mv_size: 0, mv_data: nil)
 //            print("bulk load...")
             for (k, v) in keysAndValues {
 //                print("inserting key: \(k)")
