@@ -23,9 +23,9 @@ Using tools built from both this repository and from [Kineo](https://github.com/
 
 ```sh
 ./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq create
-./diomede/.build/debug/quadstore-cli sample-database.db addindex gpso
-./diomede/.build/debug/quadstore-cli sample-database.db addindex cs
-./diomede/.build/debug/quadstore-cli sample-database.db stats
+./diomede/.build/debug/diomede sample-database.db addindex gpso
+./diomede/.build/debug/diomede sample-database.db addindex cs
+./diomede/.build/debug/diomede sample-database.db stats
 ```
 
 ```
@@ -43,7 +43,7 @@ Indexes:
 ```
 
 ```sh
-./diomede/.build/debug/quadstore-cli sample-database.db graphs
+./diomede/.build/debug/diomede sample-database.db graphs
 ```
 
 ```
@@ -56,7 +56,7 @@ urn:uuid:612cd8f3-9691-4290-8f87-42a4b22555ab
 ```
 
 ```sh
-./diomede/.build/debug/quadstore-cli sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
+./diomede/.build/debug/diomede sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
 ```
 
 ```
@@ -89,7 +89,7 @@ Characteristic Set: count = 1
 ```
 
 ```sh
-./diomede/.build/debug/quadstore-cli sample-database.db quads
+./diomede/.build/debug/diomede sample-database.db quads
 ```
 
 ```
