@@ -178,7 +178,7 @@ public class Environment {
         }
     }
     
-    public func createDatabase<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, named name: String, with keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
+    public func createDatabase<S, K: DataEncodable, V: DataEncodable>(txn: OpaquePointer, named name: String, withSortedKeysAndValues keysAndValues: S) throws where S : Sequence, S.Element == (K, V) {
         var dbi: MDB_dbi = 0
         if (mdb_dbi_open(txn, name, UInt32(MDB_CREATE), &dbi) != 0) {
             throw DiomedeError.databaseOpenError
@@ -783,15 +783,16 @@ public class Environment {
             var key = MDB_val(mv_size: 0, mv_data: nil)
             var value = MDB_val(mv_size: 0, mv_data: nil)
             
-            print("bulk load...")
+//            print("bulk load...")
             for (k, v) in keysAndValues {
+                print("inserting key: \(k)")
                 let kData = try k.asData()
                 let vData = try v.asData()
                 try kData.withUnsafeBytes { (kPtr) in
                     try vData.withUnsafeBytes { (vPtr) in
                         var key = MDB_val(mv_size: kData.count, mv_data: UnsafeMutableRawPointer(mutating: kPtr.baseAddress))
                         var value = MDB_val(mv_size: vData.count, mv_data: UnsafeMutableRawPointer(mutating: vPtr.baseAddress))
-//                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
+                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
                         let rc = mdb_cursor_put(cursor, &key, &value, UInt32(MDB_APPEND))
                         if (rc != 0) {
                             print("*** \(String(cString: mdb_strerror(rc)))")

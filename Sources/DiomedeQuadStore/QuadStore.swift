@@ -142,16 +142,16 @@ public struct DiomedeQuadStore {
                     try e.createDatabase(txn: txn, named: StaticDatabases.id_to_term.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.graphs.rawValue)
                     try e.createDatabase(txn: txn, named: defaultIndex.rawValue)
-                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, with: [
+                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, withSortedKeysAndValues: [
                         (defaultIndex.rawValue, [3,1,0,2])
                     ])
                     
-                    try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, with: [
+                    try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, withSortedKeysAndValues: [
                         ("Diomede-Version", "0.0.13".asData()),
-                        ("meta", "".asData()),
                         ("Last-Modified", now.asData()),
-                        (NextIDKey.term.rawValue, 1.asData()),
+                        ("meta", "".asData()),
                         (NextIDKey.quad.rawValue, 1.asData()),
+                        (NextIDKey.term.rawValue, 1.asData()),
                     ])
                     return 0
                 }
@@ -416,7 +416,7 @@ extension DiomedeQuadStore {
         
         try self.write { (txn) -> Int in
             print("bulk loading new index")
-            try self.env.createDatabase(txn: txn, named: indexName, with: quadIds)
+            try self.env.createDatabase(txn: txn, named: indexName, withSortedKeysAndValues: quadIds)
 //            let index = self.env.database(txn: txn, named: indexName)!
 //            try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
             try self.indexes_db.insert(txn: txn, uniqueKeysWithValues: [
