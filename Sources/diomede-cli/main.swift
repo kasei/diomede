@@ -46,70 +46,70 @@ guard args.count >= 2 else {
     print("""
         Usage:
         
-        \(pname) -q DATABASE.db COMMAND [ARGUMENTS]
+            \(pname) DATABASE.db COMMAND [ARGUMENTS]
         
         Commands:
         
-        create
-            Create an empty quadstore database.
+            create
+                Create an empty quadstore database.
 
-        stats
-            Print metadata and statistics about the quadstore.
+            stats
+                Print metadata and statistics about the quadstore.
 
-        terms
-            Print all RDF terms in the quadstore with each term's
-            associated term ID.
+            terms
+                Print all RDF terms in the quadstore with each term's
+                associated term ID.
 
-        hashes
-            Print all the SHA256 hashes of all RDF terms in the
-            quadstore with ID of the corresponding term.
+            hashes
+                Print all the SHA256 hashes of all RDF terms in the
+                quadstore with ID of the corresponding term.
 
-        INDEXNAME
-            (Where INDEXNAME is any permutation of "spog".)
+            INDEXNAME
+                (Where INDEXNAME is any permutation of "spog".)
+                
+                If INDEXNAME is a quad index available in the quadstore,
+                prints all the quads in the quadstore in the index's
+                sort order.
             
-            If INDEXNAME is a quad index available in the quadstore,
-            prints all the quads in the quadstore in the index's
-            sort order.
-        
-            Otherwise, an error is reported and a non-zero value is
-            returned.
+                Otherwise, an error is reported and a non-zero value is
+                returned.
 
-        addindex NAME
-            Add an index to the quadstore.
-            NAME may be one of:
-                * a permutation of "spog" to add a quad ordering index
-                * "cs" to add a Characteristic Sets index
+            addindex NAME
+                Add an index to the quadstore.
+                NAME may be one of:
+                    * a permutation of "spog" to add a quad ordering index
+                    * "cs" to add a Characteristic Sets index
 
-        dropindex NAME
-            Drop an index from the quadstore.
+            dropindex NAME
+                Drop an index from the quadstore.
 
-        graphs
-            Print the IRIs of all graphs in the quadstore.
-        
-        graphterms GRAPH-IRI
-            Print all the terms (used as either subject or object)
-            in specified graph.
+            graphs
+                Print the IRIs of all graphs in the quadstore.
+            
+            graphterms GRAPH-IRI
+                Print all the terms (used as either subject or object)
+                in specified graph.
 
-        triples GRAPH-IRI
-            Print all the triples in the specified graph.
+            triples GRAPH-IRI
+                Print all the triples in the specified graph.
 
-        quads
-            Print all the quads in the quadstore.
+            quads
+                Print all the quads in the quadstore.
 
-        indexes
-            Print the name of all indexes in the quadstore.
+            indexes
+                Print the name of all indexes in the quadstore.
 
-        bestIndex POSITION1 [POSITION2...]
-            Print the name of the index best suited to match quads
-            with the named positions bound. Position names are one
-            of: "subject", "predicate", "object", or "graph".
-        
-            If no quad indexes are available, an error is reported
-            and a non-zero value is returned.
+            bestIndex POSITION1 [POSITION2...]
+                Print the name of the index best suited to match quads
+                with the named positions bound. Position names are one
+                of: "subject", "predicate", "object", or "graph".
+            
+                If no quad indexes are available, an error is reported
+                and a non-zero value is returned.
 
-        cs GRAPH-IRI
-            Print the Characteristic Sets for the specified graph.
-        
+            cs GRAPH-IRI
+                Print the Characteristic Sets for the specified graph.
+            
         """)
     
     exit(0)
