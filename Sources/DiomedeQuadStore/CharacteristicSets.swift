@@ -307,6 +307,17 @@ extension CharacteristicDataSet: CustomDebugStringConvertible {
 }
 
 extension DiomedeQuadStore {
+    public var hasCharacteristicSets: Bool {
+        let indexName = "characteristicSets"
+        
+        do {
+            let databases = Set(try env.databases())
+            return databases.contains(indexName)
+        } catch {
+            return false
+        }
+    }
+    
     public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet {
         let indexName = "characteristicSets"
         
