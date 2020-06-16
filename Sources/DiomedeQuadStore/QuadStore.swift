@@ -185,18 +185,24 @@ public struct DiomedeQuadStore {
         }
     }
 
-    func bestIndex(matchingBoundPositions positions: Set<Int>) throws -> IndexOrder? {
-        var order: IndexOrder? = nil
-        try self.env.read { (txn) -> Int in
-            order = try self.bestIndex(matchingBoundPositions: positions, txn: txn)
-            return 0
-        }
-        return order
+    public func bestIndex(matchingBoundPositions positions: Set<Int>) throws -> IndexOrder? {
+        let bestIndexes = try self.indexes(matchingBoundPositions: positions)
+        return bestIndexes.first
     }
     
-    func bestIndex(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
+    public func indexes(matchingBoundPositions positions: Set<Int>) throws -> [IndexOrder] {
+        var orderes = [IndexOrder]()
+        try self.env.read { (txn) -> Int in
+            orderes = try self.indexes(matchingBoundPositions: positions, txn: txn)
+            return 0
+        }
+        return orderes
+    }
+    
+    func indexes(matchingBoundPositions: Set<Int>, txn: OpaquePointer) throws -> [IndexOrder] {
         let bound = matchingBoundPositions
         var scores = [(Int, IndexOrder)]()
+        var bestScore = 0
         for (k, v) in self.fullIndexes {
             let order = v.1
             var score = 0
@@ -207,15 +213,17 @@ public struct DiomedeQuadStore {
                     break
                 }
             }
+            bestScore = max(bestScore, score)
             scores.append((score, k))
         }
         
-        scores.sort(by: { $0.0 > $1.0 })
-        guard let first = scores.first else {
-            return nil
-        }
-        let indexOrder = first.1
-        return indexOrder
+        let bestOrders = scores.filter { $0.0 == bestScore }.map { $0.1 }
+        return bestOrders
+    }
+    
+    func bestIndex(matchingBoundPositions positions: Set<Int>, txn: OpaquePointer) throws -> IndexOrder? {
+        let bestIndexes = try self.indexes(matchingBoundPositions: positions, txn: txn)
+        return bestIndexes.first
     }
 
     public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [UInt64]) throws -> [[UInt64]] {
