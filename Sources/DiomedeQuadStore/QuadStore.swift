@@ -550,6 +550,38 @@ extension DiomedeQuadStore {
         return self.quadsIterator(fromIds: quadIds)
     }
     
+    public func prefix(for pattern: QuadPattern, in index: IndexOrder) throws -> [UInt64] {
+        var prefix = [UInt64]()
+        try self.env.read { (txn) -> Int in
+            var boundPositions = Set<Int>()
+            for (i, n) in pattern.enumerated() {
+                if case .bound(let term) = n {
+                    boundPositions.insert(i)
+                    guard let _ = try self.id(for: term, txn: txn) else {
+                        throw DiomedeError.nonExistentTermError
+                    }
+                }
+            }
+            //                print("Best index order is \(index.rawValue)")
+            let order = index.order()
+            let nodes = Array(pattern)
+            
+            for i in order {
+                let node = nodes[i]
+                guard case .bound(let term) = node else {
+                    break
+                }
+                guard let tid = try self.id(for: term, txn: txn) else {
+                    throw DiomedeError.nonExistentTermError
+                }
+                let id = UInt64(tid)
+                prefix.append(id)
+            }
+            return 0
+        }
+        return prefix
+    }
+    
     public func terms(in graph: Term, positions: Set<Int>) throws -> AnyIterator<Term> {
         var pattern = QuadPattern.all
         pattern.graph = .bound(graph)
