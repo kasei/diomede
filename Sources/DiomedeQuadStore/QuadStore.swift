@@ -226,6 +226,20 @@ public struct DiomedeQuadStore {
         return bestIndexes.first
     }
 
+    public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [UInt64], restrictedBy restrictions: [Int: UInt64]) throws -> [[UInt64]] {
+        let quadIds = try self.quadIds(usingIndex: indexOrder, withPrefix: prefix)
+        let filtered = quadIds.filter { (tids) -> Bool in
+            for (i, value) in restrictions {
+                if tids[i] != value {
+                    return false
+                }
+            }
+            return true
+        }
+        return filtered
+
+    }
+    
     public func quadIds(usingIndex indexOrder: IndexOrder, withPrefix prefix: [UInt64]) throws -> [[UInt64]] {
         guard let (index, order) = self.fullIndexes[indexOrder] else {
             throw DiomedeError.indexError
@@ -550,16 +564,18 @@ extension DiomedeQuadStore {
         return self.quadsIterator(fromIds: quadIds)
     }
     
-    public func prefix(for pattern: QuadPattern, in index: IndexOrder) throws -> [UInt64] {
+    public func prefix(for pattern: QuadPattern, in index: IndexOrder) throws -> (prefix: [UInt64], restriction: [Int: UInt64]) {
         var prefix = [UInt64]()
+        var restrictions = [Int: UInt64]()
         try self.env.read { (txn) -> Int in
             var boundPositions = Set<Int>()
             for (i, n) in pattern.enumerated() {
                 if case .bound(let term) = n {
                     boundPositions.insert(i)
-                    guard let _ = try self.id(for: term, txn: txn) else {
+                    guard let tid = try self.id(for: term, txn: txn) else {
                         throw DiomedeError.nonExistentTermError
                     }
+                    restrictions[i] = tid
                 }
             }
             //                print("Best index order is \(index.rawValue)")
@@ -579,7 +595,7 @@ extension DiomedeQuadStore {
             }
             return 0
         }
-        return prefix
+        return (prefix, restrictions)
     }
     
     public func terms(in graph: Term, positions: Set<Int>) throws -> AnyIterator<Term> {
