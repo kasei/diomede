@@ -1033,7 +1033,7 @@ extension DiomedeQuadStore {
 }
 
 extension DiomedeQuadStore {
-    // These allow DiomedeQuadStore to conform to Kineo.QuadStoreProtocol,
+    // These allow DiomedeQuadStore to conform to Kineo.QuadStoreProtocol and Kineo.LazyMaterializingQuadStore
     
     public typealias Version = UInt64
     public func effectiveVersion() throws -> Version? {
@@ -1215,7 +1215,85 @@ extension DiomedeQuadStore {
         }
     }
     
+    public func availableOrders(matching pattern: QuadPattern) throws -> [(order: [Quad.Position], fullOrder: [Quad.Position])] {
+        var boundPositions = Set<Int>()
+        for (i, n) in pattern.enumerated() {
+            if case .bound = n {
+                boundPositions.insert(i)
+            }
+        }
+        
+        var results = [(order: [Quad.Position], fullOrder: [Quad.Position])]()
+        for i in try self.indexes(matchingBoundPositions: boundPositions) {
+            let order = i.order()
+            let removePrefixCount = order.prefix { boundPositions.contains($0) }.count
+            let unbound = order.dropFirst(removePrefixCount)
+            var positions = [Int: Quad.Position]()
+            for (i, p) in Quad.Position.allCases.enumerated() {
+                positions[i] = p
+            }
+            var ordering = [Quad.Position]()
+            var fullOrdering = [Quad.Position]()
+            for i in unbound {
+                guard let p = positions[i] else { break }
+                ordering.append(p)
+            }
+            for i in order {
+                guard let p = positions[i] else { break }
+                fullOrdering.append(p)
+            }
+            
+            results.append((order: ordering, fullOrder: fullOrdering))
+        }
+        return results
+    }
     
+    public func quadIds(matching pattern: QuadPattern, orderedBy order: [Quad.Position]) throws -> [[UInt64]] {
+        let chars : [String] = order.map {
+            switch $0 {
+            case .subject:
+                return "s"
+            case .predicate:
+                return "p"
+            case .object:
+                return "o"
+            case .graph:
+                return "g"
+            }
+        }
+        let name = chars.joined()
+        guard let bestIndex = IndexOrder.init(rawValue: name) else {
+            throw DiomedeQuadStoreError.indexError("No such index \(name)")
+        }
+
+        var variableUsage = [String: Set<Int>]()
+        for (i, n) in pattern.enumerated() {
+            if case .variable(let name, binding: _) = n {
+                variableUsage[name, default: []].insert(i)
+            }
+        }
+
+        let dups = variableUsage.filter { (u) -> Bool in u.value.count > 1 }
+        let dupCheck = { (qids: [UInt64]) -> Bool in
+            for (_, positions) in dups {
+                let values = positions.map { qids[$0] }.sorted()
+                if let f = values.first, let l = values.last {
+                    if f != l {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
+
+        let (prefix, restrictions) = try self.prefix(for: pattern, in: bestIndex)
+        let quadids = try self.quadIds(usingIndex: bestIndex, withPrefix: prefix, restrictedBy: restrictions)
+        if dups.isEmpty {
+            return quadids
+        } else {
+            return quadids.filter(dupCheck)
+        }
+    }
 }
 
 private func humanReadable(count: Int) -> String {
