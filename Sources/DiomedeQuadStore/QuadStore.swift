@@ -1044,6 +1044,15 @@ extension DiomedeQuadStore {
         }
     }
     
+    public func iterateTerms(handler: (UInt64, Term) -> ()) throws {
+        let i2t = env.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
+        try i2t.unescapingIterate { (k, v) in
+            let key = UInt64(Int.fromData(k))
+            let value = try Term.fromData(v)
+            handler(key, value)
+        }
+    }
+    
     public func graphTerms(in graph: Term) -> AnyIterator<Term> {
         do {
             return try self.terms(in: graph, positions: [0, 2])
