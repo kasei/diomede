@@ -274,7 +274,8 @@ if op == "stats" {
         let value = try Term.fromData(v)
         
         let term_hash = try value.asData().sha256()
-        print("\(key): \(value) (\(term_hash._hexValue))")
+        let term = value.debugDescription
+        print("\(key): \(term) (\(term_hash._hexValue))")
     }
 } else if op == "hashes" {
     let t2i = e.database(named: DiomedeQuadStore.StaticDatabases.term_to_id.rawValue)!
