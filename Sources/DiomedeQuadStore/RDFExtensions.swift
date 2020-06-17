@@ -41,7 +41,7 @@ extension Term: DataEncodable {
     
     public static func fromData(_ data: Data) throws -> Term {
         let s = try String.fromData(data)
-        guard s.count > 2 else {
+        guard s.count >= 2 else {
             throw DiomedeError.encodingError
         }
         let c = s.first!
