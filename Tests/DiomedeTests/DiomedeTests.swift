@@ -69,9 +69,46 @@
             }
         }
 
+        func testCountQuads() throws {
+            if let qs = store {
+                try qs.load(version: 0, quads: [
+                    Quad(subject: Term(iri: "s"), predicate: Term(iri: "p1"), object: Term(string: "o"), graph: Term(iri: "tag:graph")),
+                    Quad(subject: Term(iri: "s"), predicate: Term(iri: "p2"), object: Term(integer: 7), graph: Term(iri: "tag:graph")),
+                    Quad(subject: Term(iri: "s"), predicate: Term(iri: "p3"), object: Term(iri: "s"), graph: Term(iri: "tag:graph")),
+                    Quad(subject: Term(iri: "s"), predicate: Term(iri: "tag:graph"), object: Term(iri: "s"), graph: Term(iri: "tag:graph")),
+                ])
+                XCTAssertEqual(qs.count, 4)
+                
+                let qp1 = QuadPattern.all
+                try XCTAssertEqual(qs.countQuads(matching: qp1), 4)
+
+                let sVar = Node.variable("s", binding: true)
+                let pVar = Node.variable("p", binding: true)
+                let oVar = Node.variable("o", binding: true)
+                let graph = Node.bound(Term(iri: "tag:graph"))
+                
+                let qp2 = QuadPattern(subject: sVar, predicate: pVar, object: oVar, graph: graph)
+                try XCTAssertEqual(qs.countQuads(matching: qp2), 4)
+                
+                // repeated variable ?s in both subject and object positions
+                let qp3 = QuadPattern(subject: sVar, predicate: pVar, object: sVar, graph: graph)
+                try XCTAssertEqual(qs.countQuads(matching: qp3), 2)
+                
+                // repeated variable ?s in subject, predicate, and object positions
+                let qp4 = QuadPattern(subject: sVar, predicate: sVar, object: sVar, graph: graph)
+                try XCTAssertEqual(qs.countQuads(matching: qp4), 0)
+                
+                // repeated variable ?s in subject, and object positions, and ?g in predicate, and graph positions
+                let qp5 = QuadPattern(subject: sVar, predicate: pVar, object: sVar, graph: pVar)
+                try XCTAssertEqual(qs.countQuads(matching: qp5), 1)
+            }
+        }
+        
+
         static var allTests = [
             ("testSimpleLoadQuery", testSimpleLoadQuery),
             ("testDuplicateLoad", testDuplicateLoad),
             ("testRepeatedDuplicateLoad", testRepeatedDuplicateLoad),
+            ("testCountQuads", testCountQuads),
         ]
     }

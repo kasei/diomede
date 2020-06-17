@@ -747,16 +747,20 @@ extension DiomedeQuadStore {
         var bestIndex: IndexOrder? = nil
         var prefix = [UInt64]()
         var restrictions = [Int: UInt64]()
+        var variableUsage = [String: Set<Int>]()
         do {
             try self.env.read { (txn) -> Int in
                 var boundPositions = Set<Int>()
                 for (i, n) in pattern.enumerated() {
-                    if case .bound(let term) = n {
+                    switch n {
+                    case .bound(let term):
                         boundPositions.insert(i)
                         guard let tid = try self.id(for: term, txn: txn) else {
                             throw DiomedeError.nonExistentTermError
                         }
                         restrictions[i] = tid
+                    case .variable(let name, binding: _):
+                        variableUsage[name, default: []].insert(i)
                     }
                 }
                 if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
@@ -783,8 +787,20 @@ extension DiomedeQuadStore {
             return []
         }
         
+        let dups = variableUsage.filter { (u) -> Bool in u.value.count > 1 }
+        let dupCheck = { (qids: [UInt64]) -> Bool in
+            for (_, positions) in dups {
+                let values = positions.map { qids[$0] }.sorted()
+                if let f = values.first, let l = values.last {
+                    if f != l {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
         if let index = bestIndex {
-//            print("using index \(index.rawValue)")
+            //            print("using index \(index.rawValue)")
             let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
             let filtered = quadIds.filter { (tids) -> Bool in
                 for (i, value) in restrictions {
@@ -794,7 +810,12 @@ extension DiomedeQuadStore {
                 }
                 return true
             }
-            return filtered.map { $0.map { UInt64($0) } }
+            if dups.isEmpty {
+                return filtered.map { $0.map { UInt64($0) } }
+            } else {
+                let f = filtered.filter(dupCheck)
+                return f.map { $0.map { UInt64($0) } }
+            }
         } else {
             var quadIds = [QuadID]()
             try self.quads_db.unescapingIterate { (_, spog) in
@@ -806,7 +827,13 @@ extension DiomedeQuadStore {
                 }
                 quadIds.append(tids)
             }
-            return quadIds.map { $0.values }
+            if dups.isEmpty {
+                return quadIds.map { $0.values }
+            } else {
+                let qids = quadIds.map { $0.values }
+                let f = qids.filter(dupCheck)
+                return f.map { $0.map { UInt64($0) } }
+            }
         }
     }
 
@@ -1110,13 +1137,16 @@ extension DiomedeQuadStore {
         var prefix = [UInt64]()
         var restrictions = [Int: UInt64]()
         var boundPositions = Set<Int>()
+        var variableUsage = [String: Set<Int>]()
         do {
             try self.env.read { (txn) -> Int in
                 for (i, n) in pattern.enumerated() {
-                    if case .bound(let term) = n {
+                    switch n {
+                    case .bound(let term):
                         boundPositions.insert(i)
-                        
                         restrictions[i] = try self.id(for: term, txn: txn)
+                    case .variable(let name, binding: _):
+                        variableUsage[name, default: []].insert(i)
                     }
                 }
                 if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
@@ -1141,10 +1171,23 @@ extension DiomedeQuadStore {
         } catch DiomedeError.nonExistentTermError {
             return 0
         }
-        
-        if let indexOrder = bestIndex, prefix.count == boundPositions.count {
-            // index completely covers the bound terms; matching on this index will give a precise count
-            //            print("using index \(index.rawValue)")
+
+        let dups = variableUsage.filter { (u) -> Bool in u.value.count > 1 }
+        let dupCheck = { (qids: [UInt64]) -> Bool in
+            for (_, positions) in dups {
+                let values = positions.map { qids[$0] }.sorted()
+                if let f = values.first, let l = values.last {
+                    if f != l {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
+
+        if let indexOrder = bestIndex, dups.isEmpty, !prefix.isEmpty && prefix.count == boundPositions.count {
+            // index completely covers the bound terms (of which there are more than zero),
+            // and there are no repeated variables; matching on this index will give a precise count
 //            print("using optimized count on index \(indexOrder.rawValue): \(pattern)")
             guard let (index, _) = self.fullIndexes[indexOrder] else {
                 throw DiomedeError.indexError
@@ -1156,15 +1199,18 @@ extension DiomedeQuadStore {
             let lowerKey = lower.map { Int($0) }.asData()
             let upperKey = upper.map { Int($0) }.asData()
             let count = try index.count(between: lowerKey, and: upperKey, inclusive: false)
-//            print("-> \(count)")
             return count
         } else {
 //            print("using non-optimized count for: \(pattern)")
             var count = 0
-            for _ in try self.quadIds(matching: pattern) {
-                count += 1
+            for qids in try self.quadIds(matching: pattern) {
+                if dups.isEmpty {
+                    count += 1
+                } else if dupCheck(qids) {
+                    count += 1
+                }
             }
-//            print("-> \(count)")
+
             return count
         }
     }
