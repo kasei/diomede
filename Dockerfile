@@ -1,0 +1,20 @@
+FROM swift:5.2.4-focal
+
+RUN apt-get update && apt-get install -y \
+	build-essential \
+	libserd-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+RUN mkdir /work
+WORKDIR /work
+
+COPY Package.swift .
+RUN swift package update
+COPY Tests Tests
+COPY Sources Sources
+RUN swift build --build-tests
+
+ENV KINEO_W3C_TEST_PATH /work/rdf-tests
+ENV KINEO_W3C_TEST_PATH_12 /work/rdf-tests-12
+
+CMD ["swift", "test", "--parallel"]

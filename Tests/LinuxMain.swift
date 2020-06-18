@@ -1,7 +1,6 @@
 import XCTest
+@testable import DiomedeTests
 
-import SwiftLMDBTests
-
-var tests = [XCTestCaseEntry]()
-tests += SwiftLMDBTests.allTests()
-XCTMain(tests)
+XCTMain([
+	testCase(DiomedeQuadStoreTests.allTests),
+])

@@ -52,6 +52,6 @@ let package = Package(
         ),
         .testTarget(
             name: "DiomedeTests",
-            dependencies: ["Diomede"]),
+            dependencies: ["Diomede", "DiomedeQuadStore"]),
     ]
 )
