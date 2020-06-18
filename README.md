@@ -62,7 +62,6 @@ urn:uuid:612cd8f3-9691-4290-8f87-42a4b22555ab
 
 ```
 Graph: <urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581>
-Number of Characteristic Set: 4 
 
 Characteristic Set: count = 4
        4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
@@ -87,6 +86,8 @@ Characteristic Set: count = 1
        1 <http://www.cidoc-crm.org/cidoc-crm/P7_took_place_at>
        1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
        1 <http://www.w3.org/2000/01/rdf-schema#label>
+
+Number of Characteristic Sets: 4 
 ```
 
 ```sh
