@@ -192,7 +192,7 @@ if op == "stats" {
         }
     }
     let gcount = try graphs.count()
-    print("graphs: \(gcount)")
+    print("Graphs: \(gcount)")
     
     let quads = e.database(named: "quads")!
     try e.read { (txn) -> Int in

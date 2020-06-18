@@ -54,9 +54,18 @@ public struct DiomedeQuadStore {
         }
     }
     
-    public enum NextIDKey: String {
+    public enum NextIDKey: String, CustomStringConvertible {
         case term = "next_unassigned_term_id"
         case quad = "next_unassigned_quad_id"
+        
+        public var description: String {
+            switch self {
+            case .term:
+                return "Next unassigned term ID"
+            case .quad:
+                return "Next unassigned quad ID"
+            }
+        }
     }
     
     public enum StaticDatabases: String {

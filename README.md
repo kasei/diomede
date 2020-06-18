@@ -22,28 +22,29 @@ The use of LMDB, and the specific data layout used is meant to be both extensibl
 Using tools built from both this repository and from [Kineo](https://github.com/kasei/kineo):
 
 ```sh
-./kineo/.build/debug/kineo-cli -q sample-database.db -d input-data.nq create
-./diomede/.build/debug/diomede sample-database.db addindex gpso
-./diomede/.build/debug/diomede sample-database.db addindex cs
-./diomede/.build/debug/diomede sample-database.db stats
+% kineo -q sample-database.db -d input-data.nq create
+% diomede sample-database.db addindex gpso
+% diomede sample-database.db addindex cs
+% diomede sample-database.db stats
 ```
 
 ```
 Diomede-Version: 0.0.13
-Last-Modified: 2020-05-29T17:57:35Z
-Effective version: 1590775055
-next_unassigned_term_id: 41111
-next_unassigned_quad_id: 96902
-graphs: 3100
-Quads: 96901
+Last-Modified: 2020-06-18T23:30:23Z
+Effective version: 1592523023
+Next unassigned term ID: 79769
+Next unassigned quad ID: 339768
+Graphs: 11963
+Quads: 339767 (16MB)
 Indexes:
-  - gpso
-  - Characteristic Sets
-    - 16804 sets (~5 per graph)
+  - Quad Orderings:
+    - gpso (20MB)
+  - Characteristic Sets (5MB)
+    - 61215 sets (~5 per graph)
 ```
 
 ```sh
-./diomede/.build/debug/diomede sample-database.db graphs
+% diomede sample-database.db graphs
 ```
 
 ```
@@ -56,7 +57,7 @@ urn:uuid:612cd8f3-9691-4290-8f87-42a4b22555ab
 ```
 
 ```sh
-./diomede/.build/debug/diomede sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
+% diomede sample-database.db cs urn:uuid:61b2dfbe-bce9-4d73-aa24-0d48c5f35581
 ```
 
 ```
@@ -89,7 +90,7 @@ Characteristic Set: count = 1
 ```
 
 ```sh
-./diomede/.build/debug/diomede sample-database.db quads
+% diomede sample-database.db quads
 ```
 
 ```
