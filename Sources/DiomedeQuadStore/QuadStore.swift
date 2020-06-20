@@ -131,13 +131,17 @@ public struct DiomedeQuadStore {
     }
 
     public init?(path: String, create: Bool = false) {
+        self.init(path: path, create: create, configuration: nil)
+    }
+    
+    public init?(path: String, create: Bool = false, configuration: DiomedeConfiguration?) {
         if create {
             do {
                 let f = FileManager.default
                 if !f.fileExists(atPath: path) {
                     try f.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: nil)
                 }
-                guard let e = Environment(path: path) else {
+                guard let e = Environment(path: path, configuration: configuration) else {
                     print("*** Failed to construct new LMDB Environment")
                     return nil
                 }
@@ -749,6 +753,71 @@ extension DiomedeQuadStore {
             }
         } catch {}
         return seen
+    }
+    
+    public func quadIds(matchingIDs pattern: [UInt64]) throws -> [[UInt64]] {
+        // here the elements of pattern are either =0 which indicates a variable, or >0 indicating a term ID
+        // this means that there is no provision for patterns like ?a ?a ?b ?c (with repeated variable usage)
+        var bestIndex: IndexOrder? = nil
+        var prefix = [UInt64]()
+        var restrictions = [Int: UInt64]()
+        do {
+            try self.env.read { (txn) -> Int in
+                var boundPositions = Set<Int>()
+                for (i, n) in pattern.enumerated() {
+                    switch n {
+                    case let tid where tid > 0:
+                        boundPositions.insert(i)
+                        restrictions[i] = tid
+                    default:
+                        break
+                    }
+                }
+                if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
+                    bestIndex = index
+                    //                print("Best index order is \(index.rawValue)")
+                    let order = index.order()
+                    let nodes = pattern
+                    
+                    for i in order {
+                        let tid = nodes[i]
+                        guard tid > 0 else {
+                            break
+                        }
+                        prefix.append(tid)
+                    }
+                }
+                return 0
+            }
+        } catch DiomedeError.nonExistentTermError {
+            return []
+        }
+        
+        if let index = bestIndex {
+            //            print("using index \(index.rawValue)")
+            let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
+            let filtered = quadIds.filter { (tids) -> Bool in
+                for (i, value) in restrictions {
+                    if tids[i] != value {
+                        return false
+                    }
+                }
+                return true
+            }
+            return filtered.map { $0.map { UInt64($0) } }
+        } else {
+            var quadIds = [QuadID]()
+            try self.quads_db.unescapingIterate { (_, spog) in
+                let tids = try QuadID.fromData(spog)
+                for (i, value) in restrictions {
+                    if tids[i] != value {
+                        return
+                    }
+                }
+                quadIds.append(tids)
+            }
+            return quadIds.map { $0.values }
+        }
     }
     
     public func quadIds(matching pattern: QuadPattern) throws -> [[UInt64]] {
