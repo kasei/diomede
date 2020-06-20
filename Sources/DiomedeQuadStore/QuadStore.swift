@@ -755,7 +755,7 @@ extension DiomedeQuadStore {
         return seen
     }
     
-    public func quadIds(matchingIDs pattern: [UInt64]) throws -> [[UInt64]] {
+    public func quadIds(matchingIDs pattern: [UInt64]) throws -> AnyIterator<[UInt64]> {
         // here the elements of pattern are either =0 which indicates a variable, or >0 indicating a term ID
         // this means that there is no provision for patterns like ?a ?a ?b ?c (with repeated variable usage)
         var bestIndex: IndexOrder? = nil
@@ -790,7 +790,7 @@ extension DiomedeQuadStore {
                 return 0
             }
         } catch DiomedeError.nonExistentTermError {
-            return []
+            return AnyIterator([].makeIterator())
         }
         
         if let index = bestIndex {
@@ -804,7 +804,7 @@ extension DiomedeQuadStore {
                 }
                 return true
             }
-            return filtered.map { $0.map { UInt64($0) } }
+            return AnyIterator(filtered.map { $0.map { UInt64($0) } }.makeIterator())
         } else {
             var quadIds = [QuadID]()
             try self.quads_db.unescapingIterate { (_, spog) in
@@ -816,7 +816,7 @@ extension DiomedeQuadStore {
                 }
                 quadIds.append(tids)
             }
-            return quadIds.map { $0.values }
+            return AnyIterator(quadIds.map { $0.values }.makeIterator())
         }
     }
     
