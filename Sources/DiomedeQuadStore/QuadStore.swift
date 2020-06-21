@@ -610,6 +610,72 @@ extension DiomedeQuadStore {
         }
         return (prefix, restrictions)
     }
+
+    public func termIDs(in graph: UInt64, positions: Set<Int>) throws -> AnyIterator<UInt64> {
+        let pattern : [UInt64] = [0,0,0,graph]
+        
+        var bestIndex: IndexOrder? = nil
+        var prefix = [UInt64]()
+        do {
+            try self.env.read { (txn) -> Int in
+                let boundPositions : Set<Int> = [3]
+                if let index = try self.bestIndex(matchingBoundPositions: boundPositions, txn: txn) {
+                    bestIndex = index
+                    //                print("Best index order is \(index.rawValue)")
+                    let order = index.order()
+                    
+                    for i in order {
+                        let tid = pattern[i]
+                        if tid == 0 {
+                            break
+                        }
+                        prefix.append(tid)
+                    }
+                }
+                return 0
+            }
+        } catch DiomedeError.nonExistentTermError {
+            return AnyIterator([].makeIterator())
+        }
+        
+        if let index = bestIndex {
+            if !prefix.isEmpty {
+                let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
+                var termIds = Set<UInt64>()
+                for tids in quadIds {
+                    for pos in positions {
+                        let tid = tids[pos]
+                        let id = UInt64(tid)
+                        termIds.insert(id)
+                    }
+                }
+                
+                return AnyIterator(termIds.makeIterator())
+            }
+        }
+        
+        let gid = Int(graph)
+        
+        //        print("finding graph terms for gid \(gid)")
+        
+        var quadIds = [[UInt64]]()
+        try self.quads_db.iterate(handler: { (_, value) in
+            let tids = [Int].fromData(value)
+            guard tids.count == 4 else { return }
+            guard tids[3] == gid else { return }
+            let ids = tids.map { UInt64($0) }
+            quadIds.append(ids)
+        })
+        var termIds = Set<UInt64>()
+        for tids in quadIds {
+            for pos in positions {
+                let tid = tids[pos]
+                termIds.insert(tid)
+            }
+        }
+        
+        return AnyIterator(termIds.makeIterator())
+    }
     
     public func terms(in graph: Term, positions: Set<Int>) throws -> AnyIterator<Term> {
         var pattern = QuadPattern.all
@@ -1158,6 +1224,14 @@ extension DiomedeQuadStore {
         }
     }
     
+    public func graphTermIDs(in graph: UInt64) -> AnyIterator<UInt64> {
+        do {
+            return try self.termIDs(in: graph, positions: [0,2])
+        } catch {
+            return AnyIterator([].makeIterator())
+        }
+    }
+
     public func graphTerms(in graph: Term) -> AnyIterator<Term> {
         do {
             return try self.terms(in: graph, positions: [0, 2])
