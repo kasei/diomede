@@ -269,7 +269,7 @@ if op == "stats" {
     //    printQuads(i)
 } else if op == "terms" {
     let i2t = e.database(named: DiomedeQuadStore.StaticDatabases.id_to_term.rawValue)!
-    try i2t.iterate { (k, v) in
+    try i2t.unescapingIterate { (k, v) in
         let key = Int.fromData(k)
         let value = try Term.fromData(v)
         
