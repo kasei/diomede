@@ -77,6 +77,12 @@ public struct DiomedeQuadStore {
         case graphs
     }
     
+    public enum StatusUpdateType {
+        case loadProgress(count: Int, rate: Double)
+    }
+    
+    public typealias StatusUpdateHandler = (StatusUpdateType) -> ()
+    
     var env: Environment
     var quads_db: Environment.Database
     var t2i_db: Environment.Database
@@ -84,6 +90,7 @@ public struct DiomedeQuadStore {
     var indexes_db: Environment.Database
     var stats_db: Environment.Database
     var graphs_db: Environment.Database
+    public var progressHandler: StatusUpdateHandler?
     public var fullIndexes: [IndexOrder: (Environment.Database, [Int])]
     
     private init?(environment e: Environment) {
@@ -101,6 +108,7 @@ public struct DiomedeQuadStore {
         self.stats_db = stats
         self.graphs_db = graphs
         self.indexes_db = indexes
+        self.progressHandler = nil
         
         self.fullIndexes = [:]
         do {
@@ -1463,7 +1471,7 @@ private func humanReadable(count: Int) -> String {
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
-//        let start = CFAbsoluteTimeGetCurrent()
+        let start = CFAbsoluteTimeGetCurrent()
         try self.write { (txn) -> Int in
             var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
@@ -1472,12 +1480,14 @@ extension DiomedeQuadStore {
             var quadIds_verifyUnique = [[Int]: Bool]()
             var terms = Set<Term>()
             for (i, q) in quads.enumerated() {
-//                if i % 10000 == 0 {
-//                    let elapsed = CFAbsoluteTimeGetCurrent() - start
-//                    let tps = Double(i) / elapsed
-//                    print("\(i) (\(tps) T/s)")
-//                    //                    print("\r\(humanReadable(count: i))) (\(tps) t/s)", terminator: "")
-//                }
+                if i % 1000 == 0 {
+                    let elapsed = CFAbsoluteTimeGetCurrent() - start
+                    let tps = Double(i) / elapsed
+                    if let progressHandler = self.progressHandler {
+                        progressHandler(.loadProgress(count: i, rate: tps))
+                    }
+                    //                    print("\r\(humanReadable(count: i))) (\(tps) t/s)", terminator: "")
+                }
                 do {
                     var termIds = [Int]()
                     var newTerms = 0
