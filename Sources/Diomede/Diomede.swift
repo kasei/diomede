@@ -92,7 +92,7 @@ public class Environment {
         var txn : OpaquePointer? = nil
         let rc = mdb_txn_begin(env, nil, flags, &txn)
         if (rc == 0) {
-            let txid = mdb_txn_id(txn)
+//            let txid = mdb_txn_id(txn)
 //            print("BEGIN \(txid)")
             if let txn = txn {
                 do {

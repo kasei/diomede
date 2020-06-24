@@ -10,6 +10,10 @@ extension DiomedeQuadStoreTests {
             ("testDuplicateLoad", testDuplicateLoad),
             ("testRepeatedDuplicateLoad", testRepeatedDuplicateLoad),
             ("testCountQuads", testCountQuads),
+            ("testUUIDTerm_toData", testUUIDTerm_toData),
+            ("testUUIDTerm_fromData", testUUIDTerm_fromData),
+            ("testBlankTerm_toData", testBlankTerm_toData),
+            ("testBlankTerm_fromData", testBlankTerm_fromData),
         ]
     }
 }
@@ -118,4 +122,50 @@ class DiomedeQuadStoreTests: XCTestCase {
             try XCTAssertEqual(qs.countQuads(matching: qp5), 1)
         }
     }
+    
+    func testUUIDTerm_toData() throws {
+        let t = Term(iri: "urn:uuid:08b7a198-7eaf-4a6a-b0f4-258cb7e299fe")
+        let d = try t.asData()
+        let bytes : [UInt8] = [0x55, 0x08, 0xb7, 0xa1, 0x98, 0x7e, 0xaf, 0x4a, 0x6a, 0xb0, 0xf4, 0x25, 0x8c, 0xb7, 0xe2, 0x99, 0xfe]
+        let expected = Data(bytes: bytes, count: 17)
+        XCTAssertEqual(d, expected)
+    }
+    
+    func testUUIDTerm_fromData() throws {
+        let bytes : [UInt8] = [0x55, 0x08, 0xb7, 0xa1, 0x98, 0x7e, 0xaf, 0x4a, 0x6a, 0xb0, 0xf4, 0x25, 0x8c, 0xb7, 0xe2, 0x99, 0xfe]
+        let data = Data(bytes: bytes, count: 17)
+        let term = try Term.fromData(data)
+        let expected = Term(iri: "urn:uuid:08b7a198-7eaf-4a6a-b0f4-258cb7e299fe")
+        XCTAssertEqual(term, expected)
+    }
+
+    func testBlankTerm_toData() throws {
+        let t = Term(value: "08B7A198-7EAF-4A6A-B0F4-258CB7E299FE", type: .blank)
+        let d = try t.asData()
+        let bytes : [UInt8] = [0x75, 0x08, 0xb7, 0xa1, 0x98, 0x7e, 0xaf, 0x4a, 0x6a, 0xb0, 0xf4, 0x25, 0x8c, 0xb7, 0xe2, 0x99, 0xfe]
+        print(d._hexValue)
+        let expected = Data(bytes: bytes, count: 17)
+        XCTAssertEqual(d, expected)
+    }
+    
+    func testBlankTerm_fromData() throws {
+        let bytes : [UInt8] = [0x75, 0x08, 0xb7, 0xa1, 0x98, 0x7e, 0xaf, 0x4a, 0x6a, 0xb0, 0xf4, 0x25, 0x8c, 0xb7, 0xe2, 0x99, 0xfe]
+        let data = Data(bytes: bytes, count: 17)
+        let term = try Term.fromData(data)
+        let expected = Term(value: "08B7A198-7EAF-4A6A-B0F4-258CB7E299FE", type: .blank)
+        XCTAssertEqual(term, expected)
+    }
+    
+    // the Compression framework is not cross-platform, so this isn't supported currently
+//    func testLargeLiteralEncoding() throws {
+//        let string = "This was primarily a book sale (2005 lots), although many lots of prints and curiosa as well as some drawings were also included.  Two owners are named on the title page of the catalogue, and it is uncertain which of the two is supposed to have owned the paintings.  Mr. Pieter de Malapert (1740-1806) lived in a house called Plettenberg at Jutphaas near Utrecht, a possession of the Malapert family since the late sixteenth century, after inheriting it from his father, Louis de Malapert, in 1782. He had a law degree from Utrecht University and was canon at Utrecht cathedral. At his death his estate was estimated to be worth fl. 99,286:7:4. He seems to have been active primarily as a collector of naturalia, the bulk of which was described in the Catalogus musei Malaperttiani published in 1806. His heirs elected to sell Plettenberg, so the contents were removed, probably by his only brother and executor, Jan Jacob de Malapert (1743-1816), and given to the Utrecht booksellers Bartholomeus Wild and Johannes Altheer to sell. The other owner can be identified as the late Wolfert Beeldsnijder, an iron merchant and alderman of Ijsselstein who died in 1806.  The paintings consisted mostly of landscapes and genre scenes, but the descriptions are too brief to allow them to be identified. (B. Fredericksen)"
+//        let t = Term(string: string)
+//        let data = try t.asData()
+//        XCTAssertEqual(String(UnicodeScalar(data[0])), "Z")
+//        XCTAssertLessThan(data.count, string.count)
+//        
+//        let term = try Term.fromData(data)
+//        XCTAssertEqual(term, Term(string: string))
+//        
+//    }
 }

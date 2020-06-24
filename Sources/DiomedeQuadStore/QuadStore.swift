@@ -160,7 +160,7 @@ public struct DiomedeQuadStore {
                     ])
                     
                     try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, withSortedKeysAndValues: [
-                        ("Diomede-Version", "0.0.13".asData()),
+                        ("Diomede-Version", "0.0.43".asData()),
                         ("Last-Modified", now.asData()),
                         ("meta", "".asData()),
                         (NextIDKey.quad.rawValue, 1.asData()),
