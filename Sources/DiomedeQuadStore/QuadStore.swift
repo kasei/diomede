@@ -10,7 +10,7 @@ import Foundation
 import SPARQLSyntax
 import Diomede
 
-public struct DiomedeQuadStore {
+public class DiomedeQuadStore {
     public enum IndexOrder: String {
         case spog
         case spgo
@@ -138,11 +138,11 @@ public struct DiomedeQuadStore {
         }
     }
 
-    public init?(path: String, create: Bool = false) {
+    public convenience init?(path: String, create: Bool = false) {
         self.init(path: path, create: create, configuration: nil)
     }
     
-    public init?(path: String, create: Bool = false, configuration: DiomedeConfiguration?) {
+    public convenience init?(path: String, create: Bool = false, configuration: DiomedeConfiguration?) {
         if create {
             do {
                 let f = FileManager.default
@@ -469,7 +469,7 @@ extension DiomedeQuadStore {
         }
     }
     
-    public mutating func dropFullIndex(order indexOrder: IndexOrder) throws {
+    public func dropFullIndex(order indexOrder: IndexOrder) throws {
         let indexName = indexOrder.rawValue
         try self.write { (txn) -> Int in
             self.fullIndexes.removeValue(forKey: indexOrder)
