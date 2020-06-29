@@ -1480,7 +1480,8 @@ extension DiomedeQuadStore {
             var quadIds_verifyUnique = [[Int]: Bool]()
             var terms = Set<Term>()
             for (i, q) in quads.enumerated() {
-                if i % 1000 == 0 {
+                let j = i + 1
+                if j % 1000 == 0 {
                     let elapsed = CFAbsoluteTimeGetCurrent() - start
                     let tps = Double(i) / elapsed
                     if let progressHandler = self.progressHandler {
