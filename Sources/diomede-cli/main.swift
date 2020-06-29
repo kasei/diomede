@@ -325,7 +325,7 @@ if op == "stats" {
         exit(1)
     }
     let name = args[2]
-    guard var qs = DiomedeQuadStore(path: path) else {
+    guard let qs = DiomedeQuadStore(path: path) else {
         print("Failed to construct quadstore")
         exit(1)
     }
