@@ -240,10 +240,10 @@ public struct CharacteristicDataSet {
 
         var card = 0.0
         let matching = characteristicSets.filter { $0.isSuperset(of: subset) }
-        let subsetPreds = store.termIterator(fromIds: Array(subset.predicates)).map { $0.description }.sorted()
+//        let subsetPreds = store.termIterator(fromIds: Array(subset.predicates)).map { $0.description }.sorted()
 //        print("\(matching.count) characteristic sets match: \(subsetPreds)")
         for set in matching {
-            let cs = CharacteristicSet(set, from: store)
+//            let cs = CharacteristicSet(set, from: store)
 //            print("matching set: \(cs)")
             let distinct = Double(set.count)
             var m = 1.0
