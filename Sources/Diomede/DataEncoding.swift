@@ -74,14 +74,12 @@ public struct QuadID: Hashable, Comparable, DataEncodable {
             throw DiomedeError.encodingError
         }
         
-        let values = data.withUnsafeBytes { (p: UnsafePointer<UInt64>) -> [UInt64] in
-            let bp = UnsafeBufferPointer(start: p, count: 4)
-            return [
-                UInt64(bigEndian: bp[0]),
-                UInt64(bigEndian: bp[1]),
-                UInt64(bigEndian: bp[2]),
-                UInt64(bigEndian: bp[3]),
-            ]
+        // load 4 big-endian UInt64 values from the bytes of the Data object
+        let size = MemoryLayout<UInt64>.size
+        let values = data.withUnsafeBytes { (bp: UnsafeRawBufferPointer) -> [UInt64] in
+            return stride(from: 0, to: size*4, by: size)
+                .map { bp.load(fromByteOffset: $0, as: UInt64.self) }
+                .map { UInt64(bigEndian: $0) }
         }
         return QuadID(values[0], values[1], values[2], values[3])
     }
@@ -116,16 +114,12 @@ extension UInt64 : DataEncodable {
         var be = self.bigEndian
         return Data(bytes: &be, count: 8)
     }
+    
     public static func fromData(_ data: Data) -> Self {
-        var be: UInt64 = 0
-        withUnsafeMutableBytes(of: &be) { bePtr in
-            data.withUnsafeBytes {
-                bePtr.baseAddress?.copyMemory(from: $0, byteCount: 8)
-            }
+        let be = data.withUnsafeBytes { (bp: UnsafeRawBufferPointer) -> UInt64 in
+            return UInt64(bigEndian: bp.load(as: UInt64.self))
         }
-
-//        let be: Int64 = data.withUnsafeBytes { $0.load(as: Int64.self) }
-        return UInt64(bigEndian: be)
+        return be
     }
 }
 
@@ -135,15 +129,10 @@ extension Int : DataEncodable {
         return Data(bytes: &be, count: 8)
     }
     public static func fromData(_ data: Data) -> Self {
-        var be: Int64 = 0
-        withUnsafeMutableBytes(of: &be) { bePtr in
-            data.withUnsafeBytes {
-                bePtr.baseAddress?.copyMemory(from: $0, byteCount: 8)
-            }
+        let be = data.withUnsafeBytes { (bp: UnsafeRawBufferPointer) -> Int64 in
+            return Int64(bigEndian: bp.load(as: Int64.self))
         }
-
-//        let be: Int64 = data.withUnsafeBytes { $0.load(as: Int64.self) }
-        return Int(Int64(bigEndian: be))
+        return Int(be)
     }
 }
 
