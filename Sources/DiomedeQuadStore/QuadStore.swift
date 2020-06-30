@@ -75,6 +75,7 @@ public class DiomedeQuadStore {
         case id_to_term
         case term_to_id
         case graphs
+        case prefixes
     }
     
     public enum StatusUpdateType {
@@ -88,6 +89,7 @@ public class DiomedeQuadStore {
     var t2i_db: Environment.Database
     var i2t_db: Environment.Database
     var indexes_db: Environment.Database
+    var prefixes_db: Environment.Database
     var stats_db: Environment.Database
     var graphs_db: Environment.Database
     public var progressHandler: StatusUpdateHandler?
@@ -101,6 +103,7 @@ public class DiomedeQuadStore {
             let stats = e.database(named: StaticDatabases.stats.rawValue),
             let i2t = e.database(named: StaticDatabases.id_to_term.rawValue),
             let t2i = e.database(named: StaticDatabases.term_to_id.rawValue),
+            let prefixes = e.database(named: StaticDatabases.prefixes.rawValue),
             let graphs = e.database(named: StaticDatabases.graphs.rawValue) else { return nil }
         self.quads_db = quads
         self.i2t_db = i2t
@@ -108,6 +111,7 @@ public class DiomedeQuadStore {
         self.stats_db = stats
         self.graphs_db = graphs
         self.indexes_db = indexes
+        self.prefixes_db = prefixes
         self.progressHandler = nil
         
         self.fullIndexes = [:]
@@ -162,6 +166,9 @@ public class DiomedeQuadStore {
                     try e.createDatabase(txn: txn, named: StaticDatabases.term_to_id.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.id_to_term.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.graphs.rawValue)
+                    try e.createDatabase(txn: txn, named: StaticDatabases.prefixes.rawValue, withSortedKeysAndValues: [
+                        ("rdf", Term(iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"))
+                    ])
                     try e.createDatabase(txn: txn, named: defaultIndex.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, withSortedKeysAndValues: [
                         (defaultIndex.rawValue, [3,1,0,2])
@@ -1453,6 +1460,26 @@ extension DiomedeQuadStore {
         } else {
             return quadids.filter(dupCheck)
         }
+    }
+}
+
+extension DiomedeQuadStore {
+    public func prefixes() throws -> [String:Term] {
+        var prefixes = [String:Term]()
+        try prefixes_db.unescapingIterator { (k, v) in
+            let name = try String.fromData(k)
+            let iri = try Term.fromData(v)
+            prefixes[name] = iri
+        }
+        return prefixes
+    }
+    
+    public func clearPrefixes() throws {
+        try self.prefixes_db.clear()
+    }
+    
+    public func addPrefix(_ name: String, for iri: Term) throws {
+        try prefixes_db.insert(uniqueKeysWithValues: [(name, iri)])
     }
 }
 

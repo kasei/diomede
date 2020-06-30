@@ -312,7 +312,7 @@ public class Environment {
                 let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
                     let rc = mdb_dbi_open(txn, name, 0, dbip)
                     if (rc != 0) {
-                        print("mdb_dbi_open returned [\(rc)]")
+                        print("mdb_dbi_open returned [\(rc)] for database \(name)")
                         return 1
                     }
                     return 0
@@ -340,7 +340,7 @@ public class Environment {
                     let r = withUnsafeMutablePointer(to: &dbi) { (dbip) -> Int in
                         let rc = mdb_dbi_open(txn, name, 0, dbip)
                         if (rc != 0) {
-                            print("mdb_dbi_open returned [\(rc)]")
+                            print("mdb_dbi_open returned [\(rc)] for database \(name)")
                             return 1
                         }
                         return 0

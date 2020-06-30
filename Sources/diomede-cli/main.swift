@@ -109,7 +109,17 @@ guard args.count >= 2 else {
 
             cs GRAPH-IRI
                 Print the Characteristic Sets for the specified graph.
-            
+
+            prefix [clear | PREFIX IRI]
+                
+                If a PREFIX and IRI are given, adds them to the quadstore
+                as a prefix (namespace, iri) pair.
+                
+                If the `clear` sub-command is given, all prefix
+                pairs are removed.
+                
+                Otherwise, prints all prefix pairs using SPARQL syntax.
+
         """)
     
     exit(0)
@@ -432,6 +442,25 @@ if op == "stats" {
         exit(1)
     }
     try qs.verify()
+} else if op == "prefix" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        print("Failed to construct quadstore")
+        exit(1)
+    }
+
+    if args.count == 3 && args[2] == "clear" {
+        try qs.clearPrefixes()
+    } else if args.count == 4 {
+        let name = args[2]
+        let iri = Term(iri: args[3])
+        try qs.addPrefix(name, for: iri)
+    } else {
+        let prefixes = try qs.prefixes()
+        for (name, iri) in prefixes {
+            let prefix = "\(name):".padding(toLength: max(16, name.count), withPad: " ", startingAt: 0)
+            print("PREFIX \(prefix) \(iri)")
+        }
+    }
 } else if op == "cs" {
     guard let qs = DiomedeQuadStore(path: path) else {
         print("Failed to construct quadstore")
