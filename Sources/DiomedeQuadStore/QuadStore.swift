@@ -1471,7 +1471,9 @@ private func humanReadable(count: Int) -> String {
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
+#if os(macOS)
         let start = CFAbsoluteTimeGetCurrent()
+#endif
         try self.write { (txn) -> Int in
             var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
@@ -1480,6 +1482,7 @@ extension DiomedeQuadStore {
             var quadIds_verifyUnique = [[Int]: Bool]()
             var terms = Set<Term>()
             for (i, q) in quads.enumerated() {
+#if os(macOS)
                 let j = i + 1
                 if j % 1000 == 0 {
                     let elapsed = CFAbsoluteTimeGetCurrent() - start
@@ -1489,6 +1492,7 @@ extension DiomedeQuadStore {
                     }
                     //                    print("\r\(humanReadable(count: i))) (\(tps) t/s)", terminator: "")
                 }
+#endif
                 do {
                     var termIds = [Int]()
                     var newTerms = 0
