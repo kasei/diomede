@@ -155,6 +155,29 @@ class DiomedeQuadStoreTests: XCTestCase {
         let expected = Term(value: "08B7A198-7EAF-4A6A-B0F4-258CB7E299FE", type: .blank)
         XCTAssertEqual(term, expected)
     }
+
+    func testDropGraph() throws {
+        if let qs = store {
+            for g in ["tag:graph1", "tag:graph2"] {
+                let graph = Term(iri: g)
+                let q = Quad(subject: Term(iri: "s"), predicate: Term(iri: "p1"), object: Term(string: "o"), graph: graph)
+                try qs.load(version: 0, quads: [q])
+            }
+            XCTAssertEqual(qs.count, 2)
+            let graphsPre = Set(qs.graphs().map { $0.value })
+            XCTAssertEqual(graphsPre, ["tag:graph1", "tag:graph2"])
+            
+            let g1 = Term(iri: "tag:graph1")
+            try qs.drop(graph: g1)
+
+            XCTAssertEqual(qs.count, 1)
+            let graphsPost = Set(qs.graphs().map { $0.value })
+            XCTAssertEqual(graphsPost, ["tag:graph2"])
+            
+            XCTAssertNoThrow(try qs.verify())
+        }
+    }
+    
     
     // the Compression framework is not cross-platform, so this isn't supported currently
 //    func testLargeLiteralEncoding() throws {

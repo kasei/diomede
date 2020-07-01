@@ -900,7 +900,7 @@ extension DiomedeQuadStore {
             return AnyIterator(quadIds.map { $0.values }.makeIterator())
         }
     }
-    
+
     public func quadIds(matching pattern: QuadPattern) throws -> [[UInt64]] {
 //        print("matching: \(pattern)")
         var bestIndex: IndexOrder? = nil
@@ -1581,14 +1581,12 @@ extension DiomedeQuadStore {
                     return true
                 }
             }.map { $0.key }
-            let quadKeys = quadIds.map { (q) in q.map { $0.asData() }.reduce(Data()) { $0 + $1 } }
-            let emptyValue = Data()
             
-            var quadPairs = [(Int, Data)]()
-            for qkey in quadKeys {
+            var quadPairs = [(Int, [Int])]()
+            for tids in quadIds {
                 let qid = next_quad_id
                 next_quad_id += 1
-                quadPairs.append((qid, qkey))
+                quadPairs.append((qid, tids))
             }
 
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
@@ -1597,15 +1595,50 @@ extension DiomedeQuadStore {
 
             try self.quads_db.insert(txn: txn, uniqueKeysWithValues: quadPairs)
             
+//            fatalError("TODO: insert into the indexes preserving the qid instead of emptyValue")
             for (_, pair) in self.fullIndexes {
                 let (index, order) = pair
-                let indexOrderedKeys = quadIds.map { (q) in order.map({ q[$0].asData() }).reduce(Data()) { $0 + $1 } }
-                let indexOrderedPairs = indexOrderedKeys.map { ($0, emptyValue) }
+                let indexOrderedPairs = quadPairs.map { (qid, q) in
+                    (order.map({ q[$0].asData() }).reduce(Data()) { $0 + $1 }, qid)
+                }
                 try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
             }
             
             return 0
         }
     }
-}
+    
+    public func drop(graph: Term) throws {
+        // TODO: This can be significantly optimizmed. Right now it does a table scan on the quads table,
+        //       and checks for a match on each quad's graph. Instead, we should rely on any indexes that
+        //       can more efficiently match {?s ?p ?o GRAPH}, and only delete those quads. The issue with
+        //       this currently is that the APIs for computing the best index to use for matching and
+        //       then iterating using that index do no support accessing the quad ID (which is required
+        //       to delete the quad from the quads table).
 
+        guard let _gid = try self.id(for: graph) else {
+            return
+        }
+        let gid = Int(_gid)
+        
+        try self.write { (txn) -> Int in
+            try iterateQuadIds(txn: txn) { (qid, tids) throws in
+                guard tids[3] == gid else { return }
+                // remove the quad from the quads table
+                try self.quads_db.delete(txn: txn, key: qid)
+                
+                // remove the quad from each fullIndex
+                for (_, pair) in self.fullIndexes {
+                    let (index, order) = pair
+                    let indexOrderedKey = order.map({ tids[$0].asData() }).reduce(Data()) { $0 + $1 }
+                    try index.delete(txn: txn, key: indexOrderedKey)
+                }
+            }
+            
+            // remove the graph from the graphs table
+            try self.graphs_db.delete(txn: txn, key: gid)
+            
+            return 0
+        }
+    }
+}
