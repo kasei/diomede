@@ -201,14 +201,19 @@ public class DiomedeQuadStore {
     func read(handler: (OpaquePointer) throws -> Int) throws {
         try self.env.read(handler: handler)
     }
-
-    func write(handler: (OpaquePointer) throws -> Int) throws {
+    
+    func write(mtimeHeaders: [String] = [], handler: (OpaquePointer) throws -> Int) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try self.env.write { (txn) throws -> Int in
             let r = try handler(txn)
             try stats_db.insert(txn: txn, uniqueKeysWithValues: [
                 ("Last-Modified", now)
             ])
+            for mtimeKey in mtimeHeaders {
+                try stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                    (mtimeKey, now)
+                ])
+            }
             return r
         }
     }
@@ -464,7 +469,7 @@ extension DiomedeQuadStore {
             return a.0.lexicographicallyPrecedes(b.0)
         }
         
-        try self.write { (txn) -> Int in
+        try self.write(mtimeHeaders: ["Index-Last-Modified"]) { (txn) -> Int in
             print("bulk loading new index")
             try self.env.createDatabase(txn: txn, named: indexName, withSortedKeysAndValues: quadIds)
 //            let index = self.env.database(txn: txn, named: indexName)!
@@ -478,7 +483,7 @@ extension DiomedeQuadStore {
     
     public func dropFullIndex(order indexOrder: IndexOrder) throws {
         let indexName = indexOrder.rawValue
-        try self.write { (txn) -> Int in
+        try self.write(mtimeHeaders: ["Index-Last-Modified"]) { (txn) -> Int in
             self.fullIndexes.removeValue(forKey: indexOrder)
             try self.indexes_db.delete(txn: txn, key: indexName)
             try self.env.dropDatabase(txn: txn, named: indexName)
@@ -1007,8 +1012,8 @@ extension DiomedeQuadStore {
         let i = self.quadsIterator(fromIds: quadIds)
         return AnyIterator(i.makeIterator())
     }
-
-    public func touch() throws {
+    
+    public func touch(mtimeHeaders: [String] = []) throws {
         try self.write { (_) -> Int in
             return 0
         }
@@ -1476,10 +1481,12 @@ extension DiomedeQuadStore {
     
     public func clearPrefixes() throws {
         try self.prefixes_db.clear()
+        try self.touch(mtimeHeaders: ["Prefixes-Last-Modified"])
     }
     
     public func addPrefix(_ name: String, for iri: Term) throws {
         try prefixes_db.insert(uniqueKeysWithValues: [(name, iri)])
+        try self.touch(mtimeHeaders: ["Prefixes-Last-Modified"])
     }
 }
 
@@ -1499,7 +1506,7 @@ extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
         let start = DispatchTime.now()
-        try self.write { (txn) -> Int in
+        try self.write(mtimeHeaders: ["Quads-Last-Modified"]) { (txn) -> Int in
             var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
 
@@ -1618,7 +1625,7 @@ extension DiomedeQuadStore {
         }
         let gid = Int(_gid)
         
-        try self.write { (txn) -> Int in
+        try self.write(mtimeHeaders: ["Quads-Last-Modified"]) { (txn) -> Int in
             try iterateQuadIds(txn: txn) { (qid, tids) throws in
                 guard tids[3] == gid else { return }
                 // remove the quad from the quads table

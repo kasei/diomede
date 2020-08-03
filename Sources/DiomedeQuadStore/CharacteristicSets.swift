@@ -359,7 +359,7 @@ extension DiomedeQuadStore {
 //            print("dropping \(indexName)...")
             if let index = self.env.database(named: indexName) {
                 try index.drop()
-                try self.touch() // update the last-modified timestamp
+                try self.touch(mtimeHeaders: ["CharacteristicSets-Last-Modified"]) // update the last-modified timestamp
             }
         } else {
 //            print("no-op")
@@ -400,7 +400,7 @@ extension DiomedeQuadStore {
                 
             }
 
-            try self.write { (txn) -> Int in
+            try self.write(mtimeHeaders: ["CharacteristicSets-Last-Modified"]) { (txn) -> Int in
                 let index = self.env.database(txn: txn, named: indexName)!
                 try index.insert(txn: txn, uniqueKeysWithValues: pairs)
                 return 0
