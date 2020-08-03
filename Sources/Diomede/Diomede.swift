@@ -59,7 +59,9 @@ public class Environment {
             return nil
         }
         
-        if (mdb_env_open(env, path, UInt32(cfg.flags), cfg.mode) != 0) {
+        let open_rc = mdb_env_open(env, path, UInt32(cfg.flags), cfg.mode)
+        if (open_rc != 0) {
+            print("*** \(String(cString: mdb_strerror(open_rc)))")
             mdb_env_close(env)
             env = nil
             return nil
