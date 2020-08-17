@@ -1024,6 +1024,7 @@ public enum DiomedeQuadStoreError: Error {
     case uniqueConstraintError(String)
     case countError(String)
     case indexError(String)
+    case _stopIteration
 }
 
 extension DiomedeQuadStore {
@@ -1612,6 +1613,39 @@ extension DiomedeQuadStore {
         }
     }
     
+    public func delete<S: Sequence>(quads: S) throws where S.Iterator.Element == Quad {
+        try self.write(mtimeHeaders: ["Quads-Last-Modified"]) { (txn) -> Int in
+            for q in quads {
+                let tids = try q.map { try self.id(for: $0) }.compactMap { $0 }.map { Int($0 )}
+                guard tids.count == 4 else { return 1 }
+                var qid: Int? = nil
+                if self.fullIndexes.isEmpty {
+                    do {
+                        try iterateQuadIds(txn: txn) { (_qid, _tids) throws in
+                            if _tids == tids {
+                                qid = _qid
+                                throw DiomedeQuadStoreError._stopIteration
+                            }
+                        }
+                    } catch DiomedeQuadStoreError._stopIteration {}
+                } else {
+                    for (_, pair) in self.fullIndexes {
+                        let (index, order) = pair
+                        let indexOrderedKey = order.map({ tids[$0].asData() }).reduce(Data()) { $0 + $1 }
+                        if let data = try index.get(txn: txn, key: indexOrderedKey) {
+                            qid = Int.fromData(data)
+                        }
+                        try index.delete(txn: txn, key: indexOrderedKey)
+                    }
+                }
+                if let qid = qid {
+                    try self.quads_db.delete(txn: txn, key: qid)
+                }
+            }
+            return 0
+        }
+    }
+
     public func drop(graph: Term) throws {
         // TODO: This can be significantly optimizmed. Right now it does a table scan on the quads table,
         //       and checks for a match on each quad's graph. Instead, we should rely on any indexes that

@@ -7,6 +7,7 @@ extension DiomedeQuadStoreTests {
     static var allTests : [(String, (DiomedeQuadStoreTests) -> () throws -> Void)] {
         return [
             ("testSimpleLoadQuery", testSimpleLoadQuery),
+            ("testSimpleDelete", testSimpleDelete),
             ("testDuplicateLoad", testDuplicateLoad),
             ("testRepeatedDuplicateLoad", testRepeatedDuplicateLoad),
             ("testCountQuads", testCountQuads),
@@ -68,6 +69,25 @@ class DiomedeQuadStoreTests: XCTestCase {
                     XCTFail()
                 }
             }
+        }
+    }
+    
+    func testSimpleDelete() throws {
+        if let qs = store {
+            let q1 = Quad(subject: Term(iri: "s"), predicate: Term(iri: "p1"), object: Term(string: "o"), graph: Term(iri: "tag:graph"))
+            let q2 = Quad(subject: Term(iri: "s"), predicate: Term(iri: "p2"), object: Term(integer: 7), graph: Term(iri: "tag:graph"))
+            let q3 = Quad(subject: Term(iri: "s"), predicate: Term(iri: "p3"), object: Term(integer: 8), graph: Term(iri: "tag:graph"))
+            try qs.load(version: 0, quads: [q1, q2, q3])
+            XCTAssertEqual(qs.count, 3)
+            
+            try qs.delete(quads: [q1, q3])
+            XCTAssertEqual(qs.count, 1)
+
+            let qp = QuadPattern.all
+            let matchingQuads = try Array(qs.quads(matching: qp))
+            XCTAssertEqual(qs.count, 1)
+            let q = matchingQuads[0]
+            XCTAssertEqual(q, q2)
         }
     }
     
