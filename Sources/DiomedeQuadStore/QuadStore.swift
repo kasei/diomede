@@ -1635,11 +1635,15 @@ extension DiomedeQuadStore {
                         if let data = try index.get(txn: txn, key: indexOrderedKey) {
                             qid = Int.fromData(data)
                         }
-                        try index.delete(txn: txn, key: indexOrderedKey)
+                        do {
+                            try index.delete(txn: txn, key: indexOrderedKey)
+                        } catch DiomedeError.deleteError {}
                     }
                 }
                 if let qid = qid {
-                    try self.quads_db.delete(txn: txn, key: qid)
+                    do {
+                        try self.quads_db.delete(txn: txn, key: qid)
+                    } catch DiomedeError.deleteError {}
                 }
             }
             return 0
