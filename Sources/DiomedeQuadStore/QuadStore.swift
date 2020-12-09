@@ -1513,7 +1513,6 @@ extension DiomedeQuadStore {
 
             var graphIds = Set<Int>()
             var quadIds_verifyUnique = [[Int]: Bool]()
-            var terms = Set<Term>()
             for (i, q) in quads.enumerated() {
                 let j = i + 1
                 if j % 1000 == 0 {
@@ -1529,7 +1528,6 @@ extension DiomedeQuadStore {
                     var termIds = [Int]()
                     var newTerms = 0
                     for (i, t) in q.enumerated() {
-                        terms.insert(t)
                         let d = try t.asData()
                         let term_key = try t.sha256()
                         var tid: Int
