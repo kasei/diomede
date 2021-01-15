@@ -318,6 +318,16 @@ extension DiomedeQuadStore {
         }
     }
     
+    public var characteristicSetsAreAccurate: Bool {
+        guard hasCharacteristicSets else { return false }
+        let csHeader = "CharacteristicSets-Last-Modified"
+        let quadsHeader = "Quads-Last-Modified"
+        if let csDate = self.read(mtimeHeader: csHeader), let quadsDate = self.read(mtimeHeader: quadsHeader) {
+            return csDate >= quadsDate
+        }
+        return false
+    }
+    
     public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet {
         let indexName = "characteristicSets"
         

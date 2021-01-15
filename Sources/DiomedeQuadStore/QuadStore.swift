@@ -202,6 +202,21 @@ public class DiomedeQuadStore {
         try self.env.read(handler: handler)
     }
     
+    func read(mtimeHeader: String) -> Date? {
+        do {
+            var date: Date? = nil
+            try self.env.read { (txn) throws -> Int in
+                guard let data = try stats_db.get(txn: txn, key: mtimeHeader) else { return 1 }
+                let s = try String.fromData(data)
+                date = ISO8601DateFormatter().date(from: s)
+                return 0
+            }
+            return date
+        } catch {
+            return nil
+        }
+    }
+    
     func write(mtimeHeaders: [String] = [], handler: (OpaquePointer) throws -> Int) throws {
         let now = ISO8601DateFormatter().string(from: Date())
         try self.env.write { (txn) throws -> Int in

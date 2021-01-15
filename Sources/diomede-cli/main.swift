@@ -182,11 +182,21 @@ if op == "stats" {
     
     let stats = e.database(named: DiomedeQuadStore.StaticDatabases.stats.rawValue)!
     let graphs = e.database(named: DiomedeQuadStore.StaticDatabases.graphs.rawValue)!
-    for k in (["Diomede-Version", "meta", "Last-Modified"]) {
+    let versionHeaders = [
+        "Diomede-Version",
+        "meta", "Last-Modified",
+        "Quads-Last-Modified",
+        "Index-Last-Modified",
+        "Prefixes-Last-Modified",
+        "CharacteristicSets-Last-Modified",
+    ]
+    let maxLength = versionHeaders.map { $0.count }.max() ?? 10
+    print("Versions:")
+    for k in (versionHeaders) {
         if let d = try stats.get(key: k) {
             let value = try String.fromData(d)
             if !value.isEmpty {
-                print("\(k): \(value)")
+                print("  \(k.padding(toLength: maxLength+1, withPad: " ", startingAt: 0)): \(value)")
             }
         }
     }
@@ -243,8 +253,12 @@ if op == "stats" {
                 return 0
             }
             let count = try db.count()
-            let avg = count / gcount
-            print("    - \(count) sets (~\(avg) per graph)")
+            if gcount > 0 {
+                let avg = count / gcount
+                print("    - \(count) sets (~\(avg) per graph)")
+            } else {
+                print("    - \(count) sets")
+            }
         }
     }
     
@@ -473,8 +487,10 @@ if op == "stats" {
         exit(1)
     }
 
-
     do {
+        if qs.hasCharacteristicSets {
+            print("Characteristic Sets are accurate: \(qs.characteristicSetsAreAccurate)")
+        }
         if args.count <= 2 {
             var count = 0
             for graph in qs.graphs() {
