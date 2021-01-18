@@ -212,6 +212,10 @@ public struct CharacteristicDataSet {
         return s
     }
     
+    public var instanceCount: Int {
+        return characteristicSets.reduce(0, { $0 + $1.count })
+    }
+    
     public func starCardinality(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> Double {
         let q = bgp
         let sq = q.map { $0.predicate }.compactMap { (node) -> Term? in
@@ -275,6 +279,7 @@ public struct CharacteristicDataSet {
 //        print("= \(card)")
         return card
     }
+    
 }
 
 extension CharacteristicDataSet: Sequence {
