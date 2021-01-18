@@ -19,10 +19,10 @@ struct JoinSelectivities {
 }
 
 public struct CharacteristicIDSet: Codable {
-    typealias TermID = UInt64
-    var graph: TermID
-    var count: Int
-    var predCounts: [TermID: Int]
+    public typealias TermID = UInt64
+    public var graph: TermID
+    public var count: Int
+    public var predCounts: [TermID: Int]
     
     init(graph: TermID, predicates: Set<TermID>) {
         self.count = 0
@@ -216,7 +216,7 @@ public struct CharacteristicDataSet {
         return characteristicSets.reduce(0, { $0 + $1.count })
     }
     
-    public func starCardinality(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> Double {
+    public func characteristicIDSet(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> CharacteristicIDSet {
         let q = bgp
         let sq = q.map { $0.predicate }.compactMap { (node) -> Term? in
             if case .bound(let term) = node {
@@ -241,6 +241,12 @@ public struct CharacteristicDataSet {
             throw DiomedeError.indexError
         }
         let subset = CharacteristicIDSet(graph: gid, predicates: Set(termIds))
+        return subset
+    }
+    
+    public func starCardinality(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> Double {
+        let subset = try self.characteristicIDSet(matching: bgp, in: graph, store: store)
+        let q = bgp
 
         var card = 0.0
         let matching = characteristicSets.filter { $0.isSuperset(of: subset) }
