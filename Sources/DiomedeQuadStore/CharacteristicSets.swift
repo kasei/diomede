@@ -23,17 +23,36 @@ public struct CharacteristicIDSet: Codable {
     public var graph: TermID
     public var count: Int
     public var predCounts: [TermID: Int]
-    
-    init(graph: TermID, predicates: Set<TermID>) {
+
+    public init(graph: TermID) {
+        self.count = 0
+        self.graph = graph
+        self.predCounts = [:]
+    }
+
+    public init(graph: TermID, predicates: Set<TermID>) {
         self.count = 0
         self.graph = graph
         self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, 1) })
     }
 
-    init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: Int]) {
+    public init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: Int]) {
         self.count = count
         self.graph = graph
         self.predCounts = predCounts
+    }
+
+    public mutating func formUnion(_ other: CharacteristicIDSet) {
+        self.count += other.count
+        self.predCounts.merge(other.predCounts) { $0 + $1 }
+    }
+
+    public func union(_ other: CharacteristicIDSet) -> CharacteristicIDSet {
+        let count = self.count + other.count
+        var predCounts = self.predCounts
+        predCounts.merge(other.predCounts) { $0 + $1 }
+        let preds = Set(predCounts.keys)
+        return CharacteristicIDSet(graph: self.graph, predicates: preds, count: count, predCounts: predCounts)
     }
 
     var predicates: Set<TermID> {
@@ -49,7 +68,7 @@ public struct CharacteristicSet: Codable {
     public var count: Int
     public var predCounts: [Term: Int]
     
-    init(_ cs: CharacteristicIDSet, from store: DiomedeQuadStore) {
+    public init(_ cs: CharacteristicIDSet, from store: DiomedeQuadStore) {
         self.count = cs.count
         self.predCounts = [:]
         for (tid, count) in cs.predCounts {
@@ -59,14 +78,27 @@ public struct CharacteristicSet: Codable {
         }
     }
     
-    init(predicates: Set<Term>) {
+    public init(predicates: Set<Term>) {
         self.count = 0
         self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, 1) })
     }
 
-    init(predicates: Set<Term>, count: Int, predCounts: [Term: Int]) {
+    public init(predicates: Set<Term>, count: Int, predCounts: [Term: Int]) {
         self.count = count
         self.predCounts = predCounts
+    }
+
+    public mutating func formUnion(_ other: CharacteristicSet) {
+        self.count += other.count
+        self.predCounts.merge(other.predCounts) { $0 + $1 }
+    }
+
+    public func union(_ other: CharacteristicSet) -> CharacteristicSet {
+        let count = self.count + other.count
+        var predCounts = self.predCounts
+        predCounts.merge(other.predCounts) { $0 + $1 }
+        let preds = Set(predCounts.keys)
+        return CharacteristicSet(predicates: preds, count: count, predCounts: predCounts)
     }
 
     public var predicates: Set<Term> {
@@ -215,7 +247,17 @@ public struct CharacteristicDataSet {
     public var instanceCount: Int {
         return characteristicSets.reduce(0, { $0 + $1.count })
     }
-    
+
+    public func aggregatedCharacteristicSet(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> CharacteristicIDSet {
+        guard let gid = try store.id(for: graph) else {
+            throw DiomedeError.indexError
+        }
+        let subset = try self.characteristicIDSet(matching: bgp, in: graph, store: store)
+        let matching = characteristicSets.filter { $0.isSuperset(of: subset) }
+        let acs = matching.reduce(CharacteristicIDSet(graph: gid)) { $0.union($1) }
+        return acs
+    }
+
     public func characteristicIDSet(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> CharacteristicIDSet {
         let q = bgp
         let sq = q.map { $0.predicate }.compactMap { (node) -> Term? in

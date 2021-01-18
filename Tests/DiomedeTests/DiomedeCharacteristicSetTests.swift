@@ -128,18 +128,33 @@ class DiomedeCharacteristicSetTests: XCTestCase {
                 TriplePattern(subject: .variable("s", binding: true), predicate: .variable("p", binding: true), object: .variable("o", binding: true))
             ], in: graph, store: qs), 25)
 
+            // this is the same as COUNT(?s) WHERE { ?s ex:type ?o }
             XCTAssertEqual(try csDataset.starCardinality(matching: [
                 TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/type")), object: .variable("o", binding: true))
             ], in: graph, store: qs), 15)
 
+            // this is the same as COUNT(?s) WHERE { ?s ex:name ?o }
             XCTAssertEqual(try csDataset.starCardinality(matching: [
                 TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/name")), object: .variable("o", binding: true))
             ], in: graph, store: qs), 10)
 
+            // this is the same as COUNT(*) WHERE { ?s ex:type ?type ; ex:name ?name }
             XCTAssertEqual(try csDataset.starCardinality(matching: [
                 TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/type")), object: .variable("o1", binding: true)),
                 TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/name")), object: .variable("o2", binding: true))
             ], in: graph, store: qs), 10)
+            
+            
+            // this is the same as COUNT(DISTINCT ?s) WHERE { ?s ex:type ?o }
+            XCTAssertEqual(try csDataset.aggregatedCharacteristicSet(matching: [
+                TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/type")), object: .variable("o", binding: true))
+            ], in: graph, store: qs).count, 15)
+
+            // this is the same as COUNT(DISTINCT ?s) WHERE { ?s ex:name ?o }
+            XCTAssertEqual(try csDataset.aggregatedCharacteristicSet(matching: [
+                TriplePattern(subject: .variable("s", binding: true), predicate: .bound(Term(iri: "http://example.org/name")), object: .variable("o", binding: true))
+            ], in: graph, store: qs).count, 5)
+
         }
     }
 }
