@@ -1242,7 +1242,7 @@ extension DiomedeQuadStore {
         return count
     }
     
-    var graphsCount: Int {
+    public var graphsCount: Int {
         do {
             return try self.graphs_db.count()
         } catch {
