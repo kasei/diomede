@@ -1242,6 +1242,14 @@ extension DiomedeQuadStore {
         return count
     }
     
+    var graphsCount: Int {
+        do {
+            return try self.graphs_db.count()
+        } catch {
+            return 0
+        }
+    }
+
     public func graphs() -> AnyIterator<Term> {
         do {
             return try self.namedGraphs()
