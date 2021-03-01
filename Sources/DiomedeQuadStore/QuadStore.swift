@@ -11,6 +11,8 @@ import SPARQLSyntax
 import Diomede
 
 public class DiomedeQuadStore {
+    static let CURRENT_SCHEMA_VERSION = "0.0.60"
+    
     public enum IndexOrder: String {
         case spog
         case spgo
@@ -146,6 +148,73 @@ public class DiomedeQuadStore {
         self.init(path: path, create: create, configuration: nil)
     }
     
+    public static func upgrade(path: String, configuration: DiomedeConfiguration?) -> DiomedeQuadStore? {
+        do {
+            let f = FileManager.default
+            if !f.fileExists(atPath: path) {
+                try f.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: nil)
+            }
+            guard let e = Environment(path: path, configuration: configuration) else {
+                print("*** Failed to construct new LMDB Environment")
+                return nil
+            }
+            
+            let now = ISO8601DateFormatter().string(from: Date.init())
+            let defaultIndex = IndexOrder.gpso
+            
+            try e.write { (txn) -> Int in
+                try e.createDatabase(txn: txn, named: StaticDatabases.quads.rawValue)
+                try e.createDatabase(txn: txn, named: StaticDatabases.term_to_id.rawValue)
+                try e.createDatabase(txn: txn, named: StaticDatabases.id_to_term.rawValue)
+                try e.createDatabase(txn: txn, named: StaticDatabases.graphs.rawValue)
+                do {
+                    try e.createDatabase(txn: txn, named: StaticDatabases.prefixes.rawValue, withSortedKeysAndValues: [
+                        ("rdf", Term(iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#")),
+                        ("sd", Term(iri: "http://www.w3.org/ns/sparql-service-description#"))
+                    ])
+                } catch DiomedeError.insertError {
+                }
+                try e.createDatabase(txn: txn, named: defaultIndex.rawValue)
+                do {
+                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, withSortedKeysAndValues: [
+                        (defaultIndex.rawValue, [3,1,0,2])
+                    ])
+                } catch DiomedeError.insertError {
+                }
+                
+                do {
+                    try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, withSortedKeysAndValues: [
+                        ("Diomede-Version", CURRENT_SCHEMA_VERSION.asData()),
+                        ("Last-Modified", now.asData()),
+                        ("meta", "".asData()),
+                        (NextIDKey.quad.rawValue, 1.asData()),
+                        (NextIDKey.term.rawValue, 1.asData()),
+                    ])
+                } catch DiomedeError.insertError {
+                }
+                return 0
+            }
+            
+            guard let db = DiomedeQuadStore(environment: e) else { return nil }
+            
+            try e.write(handler: { (txn) -> Int in
+                try db.stats_db.delete(txn: txn, key: "Diomede-Version")
+                try db.stats_db.delete(txn: txn, key: "Last-Modified")
+                try db.stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                    ("Diomede-Version", CURRENT_SCHEMA_VERSION.asData()),
+                    ("Last-Modified", now.asData()),
+                ])
+                return 0
+            })
+
+            
+            return db
+        } catch let e {
+            print("*** Environment.init: \(e)")
+            return nil
+        }
+    }
+    
     public convenience init?(path: String, create: Bool = false, configuration: DiomedeConfiguration?) {
         if create {
             do {
@@ -159,8 +228,10 @@ public class DiomedeQuadStore {
                 }
 
                 let now = ISO8601DateFormatter().string(from: Date.init())
-                let defaultIndex = IndexOrder.gpso
-
+                
+                let defaultIndexes : [DiomedeQuadStore.IndexOrder] = [.gpso, .gspo, .opsg]
+                let defaultIndexesPairs = defaultIndexes.map { ($0.rawValue, $0.order()) }
+                
                 try e.write { (txn) -> Int in
                     try e.createDatabase(txn: txn, named: StaticDatabases.quads.rawValue)
                     try e.createDatabase(txn: txn, named: StaticDatabases.term_to_id.rawValue)
@@ -169,13 +240,13 @@ public class DiomedeQuadStore {
                     try e.createDatabase(txn: txn, named: StaticDatabases.prefixes.rawValue, withSortedKeysAndValues: [
                         ("rdf", Term(iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"))
                     ])
-                    try e.createDatabase(txn: txn, named: defaultIndex.rawValue)
-                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, withSortedKeysAndValues: [
-                        (defaultIndex.rawValue, [3,1,0,2])
-                    ])
-                    
+                    for (idxName, _) in defaultIndexesPairs {
+                        try e.createDatabase(txn: txn, named: idxName)
+                    }
+                    try e.createDatabase(txn: txn, named: StaticDatabases.fullIndexes.rawValue, withSortedKeysAndValues: defaultIndexesPairs)
+
                     try e.createDatabase(txn: txn, named: StaticDatabases.stats.rawValue, withSortedKeysAndValues: [
-                        ("Diomede-Version", "0.0.43".asData()),
+                        ("Diomede-Version", DiomedeQuadStore.CURRENT_SCHEMA_VERSION.asData()),
                         ("Last-Modified", now.asData()),
                         ("meta", "".asData()),
                         (NextIDKey.quad.rawValue, 1.asData()),
@@ -1529,6 +1600,116 @@ private func humanReadable(count: Int) -> String {
 extension DiomedeQuadStore {
     // These allow DiomedeQuadStore to conform to MutableQuadStoreProtocol
     public func load<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
+        var termCount = 0
+        try? self.read { (txn) -> Int in
+            termCount = self.t2i_db.count(txn: txn)
+            return 0
+        }
+        
+        if self.count == 0 && termCount == 0 {
+            // this is an optimized version that doesn't have to check the database tables for existing values
+            return try loadEmpty(version: version, quads: quads)
+        } else {
+            return try loadNaive(version: version, quads: quads)
+        }
+    }
+    
+    private func loadEmpty<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
+        let start = DispatchTime.now()
+        try self.write(mtimeHeaders: ["Quads-Last-Modified"]) { (txn) -> Int in
+            var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
+            var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
+
+            var terms = [Data:Int]()
+            var graphIds = Set<Int>()
+            
+            var quadIds = Set<[Int]>()
+            for (i, q) in quads.enumerated() {
+                let j = i + 1
+                if j % 1000 == 0 {
+                    let nanoTime = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
+                    let elapsed = Double(nanoTime) / 1_000_000_000
+                    let tps = Double(i) / elapsed
+                    if let progressHandler = self.progressHandler {
+                        progressHandler(.loadProgress(count: i, rate: tps))
+                    }
+                    //                    print("\r\(humanReadable(count: i))) (\(tps) t/s)", terminator: "")
+                }
+                do {
+                    var termIds = [Int]()
+                    var newTerms = 0
+                    for (i, t) in q.enumerated() {
+                        let d = try t.asData()
+                        let term_key = try t.sha256()
+                        var tid: Int
+                        if let _tid = terms[term_key] {
+                            tid = _tid
+                        } else {
+                            newTerms += 1
+                            tid = next_term_id
+                            let i2t_pair = (tid, d)
+                            let t2i_pair = (term_key, tid)
+                            try self.i2t_db.insert(txn: txn, uniqueKeysWithValues: [i2t_pair])
+                            try self.t2i_db.insert(txn: txn, uniqueKeysWithValues: [t2i_pair])
+                            terms[term_key] = tid
+                            next_term_id += 1
+                        }
+
+                        termIds.append(tid)
+                        if (i == 3) {
+                            graphIds.insert(tid)
+                        }
+                    }
+                    assert(termIds.count == 4)
+                    
+                    // if newTerms == 0, all the terms in this quad were already in the database,
+                    // and so we need to check below if this quad is already in the quads table
+                    // (and indexes) and prevent it from being inserted twice.
+                    // if newTerms > 0, then it necessarily can't be in the quads table or indexes
+                    // because at least one term ID did not exist until just now.
+                    quadIds.insert(termIds)
+                } catch DiomedeError.mapFullError {
+                    print("Failed to load data.")
+                    throw DiomedeError.mapFullError
+                } catch DiomedeError.insertError {
+                    throw DiomedeError.insertError("Failed to load data.")
+                } catch {}
+            }
+            
+            let graphIdPairs = graphIds.map { ($0, Data()) }
+            try self.graphs_db.insert(txn: txn, uniqueKeysWithValues: graphIdPairs)
+            
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                (NextIDKey.term.rawValue, next_term_id),
+            ])
+
+            var quadPairs = [(Int, [Int])]()
+            for tids in quadIds {
+                let qid = next_quad_id
+                next_quad_id += 1
+                quadPairs.append((qid, tids))
+            }
+
+            try stats_db.insert(txn: txn, uniqueKeysWithValues: [
+                (NextIDKey.quad.rawValue, next_quad_id),
+            ])
+
+            try self.quads_db.insert(txn: txn, uniqueKeysWithValues: quadPairs)
+            
+//            fatalError("TODO: insert into the indexes preserving the qid instead of emptyValue")
+            for (_, pair) in self.fullIndexes {
+                let (index, order) = pair
+                let indexOrderedPairs = quadPairs.map { (qid, q) in
+                    (order.map({ q[$0].asData() }).reduce(Data()) { $0 + $1 }, qid)
+                }
+                try index.insert(txn: txn, uniqueKeysWithValues: indexOrderedPairs)
+            }
+            
+            return 0
+        }
+    }
+
+    private func loadNaive<S>(version: Version, quads: S) throws where S : Sequence, S.Element == Quad {
         let start = DispatchTime.now()
         try self.write(mtimeHeaders: ["Quads-Last-Modified"]) { (txn) -> Int in
             var next_term_id = try stats_db.get(txn: txn, key: NextIDKey.term.rawValue).map { Int.fromData($0) } ?? 1
@@ -1583,8 +1764,7 @@ extension DiomedeQuadStore {
                     print("Failed to load data.")
                     throw DiomedeError.mapFullError
                 } catch DiomedeError.insertError {
-                    print("Failed to load data.")
-                    throw DiomedeError.insertError
+                    throw DiomedeError.insertError("Failed to load data.")
                 } catch {}
             }
             

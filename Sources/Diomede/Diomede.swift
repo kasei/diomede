@@ -7,7 +7,7 @@ public enum DiomedeError: Error {
     case databaseOpenError
     case cursorOpenError(Int32)
     case cursorError
-    case insertError
+    case insertError(String)
     case mapFullError
     case getError
     case deleteError
@@ -796,10 +796,8 @@ public class Environment {
 //                        print("cursor put: \(kData._hexValue) => \(vData._hexValue)")
                         let rc = mdb_cursor_put(cursor, &key, &value, UInt32(MDB_APPEND))
                         if (rc != 0) {
-                            print("*** \(String(cString: mdb_strerror(rc)))")
-                            print("key: \(kData._hexValue)")
-                            print("value: \(vData._hexValue)")
-                            throw DiomedeError.insertError
+                            let err = String(cString: mdb_strerror(rc))
+                            throw DiomedeError.insertError("\(err): key: \(kData._hexValue); value: \(vData._hexValue)")
                         }
                     }
                 }
@@ -819,8 +817,7 @@ public class Environment {
                             if (rc == MDB_MAP_FULL) {
                                 throw DiomedeError.mapFullError
                             } else if (rc != 0) {
-                                print("*** \(String(cString: mdb_strerror(rc)))")
-                                throw DiomedeError.insertError
+                                throw DiomedeError.insertError(String(cString: mdb_strerror(rc)))
                             }
                         }
                     }
@@ -847,8 +844,7 @@ public class Environment {
                         if (rc == MDB_MAP_FULL) {
                             throw DiomedeError.mapFullError
                         } else if (rc != 0) {
-                            print("*** \(String(cString: mdb_strerror(rc)))")
-                            throw DiomedeError.insertError
+                            throw DiomedeError.insertError(String(cString: mdb_strerror(rc)))
                         }
                     }
                 }

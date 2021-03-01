@@ -158,6 +158,12 @@ if op == "create" {
         exit(1)
     }
     exit(0)
+} else if op == "upgrade" {
+    guard let _ = DiomedeQuadStore.upgrade(path: path, configuration: nil) else {
+        print("Failed to upgrade QuadStore")
+        exit(1)
+    }
+    exit(0)
 }
 
 guard let e = Environment(path: path) else {
