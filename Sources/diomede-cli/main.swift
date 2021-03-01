@@ -33,7 +33,8 @@ func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet)
     for set in sets {
         print("Characteristic Set: count = \(set.count)")
         for pred in set.predicates.sorted() {
-            let occurences = set.predCounts[pred]!
+            let predCount = set.predCounts[pred]!
+            let occurences = predCount.sum
             print(String(format: "    %4d \(pred)", occurences))
         }
         print("")

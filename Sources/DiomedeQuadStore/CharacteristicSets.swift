@@ -18,11 +18,52 @@ struct JoinSelectivities {
     var oo: Double
 }
 
+/// Statistics related to a predicate within the context of a Characteristic Set
+public struct PredicateCount: Codable {
+    /// The total number of triples using this predicate within this Characteristic Set
+    public var sum: Int
+    
+    /// The minimum number of triples with this predicate for any subject within this Characteristic Set
+    public var min: Int
+    
+    /// The maximum number of triples with this predicate for any subject within this Characteristic Set
+    public var max: Int
+
+    // NOTE: whenever new variables are added here, they must be serialized and deserialized
+    //       in the CharacteristicIDSet extension below that implements asData()/fromData().
+
+    
+    /// Update statistics for this predicate based on the observation of a CS star, with a specified number of triples using this predicate
+    /// - Parameter count: The number of triples sharing a subject with this predicate observed in the data
+    public mutating func addMultiplicity(_ count: Int) {
+        self.sum += count
+        self.min = Swift.min(self.min, count)
+        self.max = Swift.max(self.max, count)
+    }
+    
+    public mutating func formUnion(_ other: PredicateCount) {
+        self.sum += other.sum
+        self.min = Swift.min(self.min, other.min)
+        self.max = Swift.max(self.max, other.max)
+    }
+
+    public func union(_ other: PredicateCount) -> PredicateCount {
+        var u = PredicateCount(sum: 0, min: 0, max: 0)
+
+        u.sum += self.sum
+        u.sum += other.sum
+        
+        return u
+    }
+}
+
 public struct CharacteristicIDSet: Codable {
     public typealias TermID = UInt64
     public var graph: TermID
     public var count: Int
-    public var predCounts: [TermID: Int]
+    public var predCounts: [TermID: PredicateCount]
+    // NOTE: whenever new variables are added here, they must be serialized and deserialized
+    //       in the CharacteristicIDSet extension below that implements asData()/fromData().
 
     public init(graph: TermID) {
         self.count = 0
@@ -30,13 +71,7 @@ public struct CharacteristicIDSet: Codable {
         self.predCounts = [:]
     }
 
-    public init(graph: TermID, predicates: Set<TermID>) {
-        self.count = 0
-        self.graph = graph
-        self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, 1) })
-    }
-
-    public init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: Int]) {
+    public init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: PredicateCount]) {
         self.count = count
         self.graph = graph
         self.predCounts = predCounts
@@ -44,17 +79,29 @@ public struct CharacteristicIDSet: Codable {
 
     public mutating func formUnion(_ other: CharacteristicIDSet) {
         self.count += other.count
-        self.predCounts.merge(other.predCounts) { $0 + $1 }
+        for (tid, pc) in other.predCounts {
+            self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
+        }
     }
 
     public func union(_ other: CharacteristicIDSet) -> CharacteristicIDSet {
         let count = self.count + other.count
         var predCounts = self.predCounts
-        predCounts.merge(other.predCounts) { $0 + $1 }
+        predCounts.merge(other.predCounts) { $0.union($1) }
         let preds = Set(predCounts.keys)
         return CharacteristicIDSet(graph: self.graph, predicates: preds, count: count, predCounts: predCounts)
     }
 
+    public mutating func addStar(_ quadids: [[TermID]]) {
+        // caller is responsible for ensuring that all added stars have the same predicates
+        self.count += 1
+        let grouped = Dictionary(grouping: quadids, by: { $0[1] })
+        for (pid, quadids) in grouped {
+            let count = quadids.count
+            predCounts[pid, default: PredicateCount(sum: 0, min: Int.max, max: Int.min)].addMultiplicity(count)
+        }
+    }
+    
     var predicates: Set<TermID> {
         return Set(predCounts.keys)
     }
@@ -66,37 +113,39 @@ public struct CharacteristicIDSet: Codable {
 
 public struct CharacteristicSet: Codable {
     public var count: Int
-    public var predCounts: [Term: Int]
+    public var predCounts: [Term: PredicateCount]
     
     public init(_ cs: CharacteristicIDSet, from store: DiomedeQuadStore) {
         self.count = cs.count
         self.predCounts = [:]
-        for (tid, count) in cs.predCounts {
+        for (tid, predcount) in cs.predCounts {
             let terms = store.termIterator(fromIds: [tid])
             let term = terms.next()!
-            self.predCounts[term] = count
+            self.predCounts[term] = predcount
         }
     }
     
     public init(predicates: Set<Term>) {
         self.count = 0
-        self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, 1) })
+        self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, PredicateCount(sum: 1, min: 1, max: 1)) })
     }
 
-    public init(predicates: Set<Term>, count: Int, predCounts: [Term: Int]) {
+    public init(predicates: Set<Term>, count: Int, predCounts: [Term: PredicateCount]) {
         self.count = count
         self.predCounts = predCounts
     }
 
     public mutating func formUnion(_ other: CharacteristicSet) {
         self.count += other.count
-        self.predCounts.merge(other.predCounts) { $0 + $1 }
+        for (tid, pc) in other.predCounts {
+            self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
+        }
     }
 
     public func union(_ other: CharacteristicSet) -> CharacteristicSet {
         let count = self.count + other.count
         var predCounts = self.predCounts
-        predCounts.merge(other.predCounts) { $0 + $1 }
+        predCounts.merge(other.predCounts) { $0.union($1) }
         let preds = Set(predCounts.keys)
         return CharacteristicSet(predicates: preds, count: count, predCounts: predCounts)
     }
@@ -143,8 +192,7 @@ public struct CharacteristicDataSet {
         var characteristicSets = [CharacteristicIDSet]()
         var lastSubject: TermID? = nil
         var triples = [[TermID]]()
-        var counts = [Set<TermID>: Int]()
-        var predCounts = [Set<TermID>: [TermID: Int]]()
+        var css = [Set<TermID>: CharacteristicIDSet]()
         
         var qp = QuadPattern.all
         qp.graph = .bound(graph)
@@ -160,13 +208,8 @@ public struct CharacteristicDataSet {
             if let last = lastSubject, last != s {
                 let predicates = triples.map { $0[1] }
                 let set = Set(predicates)
-                counts[set, default: 0] += 1
                 
-                for t in triples {
-                    let p = t[1]
-                    predCounts[set, default: [:]][p, default: 0] += 1
-                }
-                
+                css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
                 triples = []
             }
             triples.append(Array(t))
@@ -177,25 +220,18 @@ public struct CharacteristicDataSet {
         if !triples.isEmpty {
             let predicates = triples.map { $0[1] }
             let set = Set(predicates)
-            counts[set, default: 0] += 1
-            
-            for t in triples {
-                let p = t[1]
-                predCounts[set, default: [:]][p, default: 0] += 1
-            }
+
+            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
         }
         
-        for (set, count) in counts {
-            let pcounts = predCounts[set, default: [:]]
-            let cs = CharacteristicIDSet(graph: gid, predicates: set, count: count, predCounts: pcounts)
-            characteristicSets.append(cs)
-        }
+        characteristicSets.append(contentsOf: css.values)
         return characteristicSets
     }
     
     static func generateCharacteristicSets_naive(store: DiomedeQuadStore, in graph: Term) throws -> [CharacteristicIDSet] {
         var characteristicSets = [CharacteristicIDSet]()
         var triples = [TermID: [[TermID]]]()
+        var css = [Set<TermID>: CharacteristicIDSet]()
 
         var qp = QuadPattern.all
         qp.graph = .bound(graph)
@@ -206,28 +242,17 @@ public struct CharacteristicDataSet {
             triples[s, default: []].append(Array(t))
         }
         
-        var counts = [Set<TermID>: Int]()
-        var predCounts = [Set<TermID>: [TermID: Int]]()
-        for (_, triples) in triples {
-            let predicates = triples.map { $0[1] }
-            let set = Set(predicates)
-            counts[set, default: 0] += 1
-            
-            for t in triples {
-                let p = t[1]
-                predCounts[set, default: [:]][p, default: 0] += 1
-            }
-        }
-        
         guard let gid = try store.id(for: graph) else {
             throw DiomedeError.indexError
         }
         
-        for (set, count) in counts {
-            let pcounts = predCounts[set, default: [:]]
-            let cs = CharacteristicIDSet(graph: gid, predicates: set, count: count, predCounts: pcounts)
-            characteristicSets.append(cs)
+        for (_, triples) in triples {
+            let predicates = triples.map { $0[1] }
+            let set = Set(predicates)
+            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
         }
+        
+        characteristicSets.append(contentsOf: css.values)
         return characteristicSets
     }
     
@@ -257,7 +282,7 @@ public struct CharacteristicDataSet {
         let acs = matching.reduce(CharacteristicIDSet(graph: gid)) { $0.union($1) }
         return acs
     }
-
+    
     public func characteristicIDSet(matching bgp: [TriplePattern], in graph: Term, store: DiomedeQuadStore) throws -> CharacteristicIDSet {
         let q = bgp
         let sq = q.map { $0.predicate }.compactMap { (node) -> Term? in
@@ -282,7 +307,11 @@ public struct CharacteristicDataSet {
         guard let gid = try store.id(for: graph) else {
             throw DiomedeError.indexError
         }
-        let subset = CharacteristicIDSet(graph: gid, predicates: Set(termIds))
+        
+        var subset = CharacteristicIDSet(graph: gid)
+        subset.addStar(termIds.map { [0, $0, 0, 0] })
+        // the counts don't matter in this CharacteristicIDSet because it will only be used
+        // in a subsequent code to match supersets (which will contain real counts of the data).
         return subset
     }
     
@@ -309,12 +338,12 @@ public struct CharacteristicDataSet {
                     guard let pid = try store.id(for: pred) else {
                         throw DiomedeError.nonExistentTermError
                     }
-                    let tm = Double(set.predCounts[pid] ?? 0) / distinct
+                    let tm = Double(set.predCounts[pid]?.sum ?? 0) / distinct
 //                    print("\(tm) <= \(t)")
                     m *= tm
                 } else {
                     // unbound predicate; sum up all the counts
-                    let allPredCounts = set.predCounts.values.map { Double($0) }.reduce(0.0) { $0 + $1 }
+                    let allPredCounts = set.predCounts.values.map { Double($0.sum) }.reduce(0.0) { $0 + $1 }
                     let tm = allPredCounts / distinct
 //                    print("\(tm) <= \(t)")
                     m *= tm
@@ -344,7 +373,7 @@ extension CharacteristicSet: CustomDebugStringConvertible {
 
 extension CharacteristicIDSet: CustomDebugStringConvertible {
     public var debugDescription: String {
-        return "CharacteristicSet(\(count); \(predicates.sorted()))"
+        return "CharacteristicIDSet(\(count); \(predicates.sorted()))"
     }
 }
 
@@ -397,19 +426,10 @@ extension DiomedeQuadStore {
         var sets = [CharacteristicIDSet]()
         try index.iterate(between: lower, and: upper) { (k, v) in
             let key = [Int].fromData(k)
-            var values = [Int].fromData(v)
             guard key[0] == gid else {
                 return
             }
-//            let i = key[1]
-            let count = values[0]
-            values.removeFirst()
-            let pairs = stride(from: 0, to: values.endIndex, by: 2).map {
-                (UInt64(values[$0]), values[$0.advanced(by: 1)])
-            }
-            let predCounts = Dictionary(uniqueKeysWithValues: pairs)
-            let preds = Set(predCounts.keys)
-            let cs = CharacteristicIDSet(graph: gid, predicates: preds, count: count, predCounts: predCounts)
+            let cs = try CharacteristicIDSet.fromData(v, in: gid)
             sets.append(cs)
         }
         return try CharacteristicDataSet(self, characteristicSets: sets)
@@ -454,13 +474,8 @@ extension DiomedeQuadStore {
             for (i, cs) in sets.enumerated() {
                 let key = [Int(gid), i]
                 let keyData = key.asData()
-                var value = [cs.count]
-                for (pred, count) in cs.predCounts {
-                    value.append(contentsOf: [Int(pred), count])
-                }
-                let valueData = value.asData()
+                let valueData = try cs.asData()
                 pairs.append((keyData, valueData))
-                
             }
 
             try self.write(mtimeHeaders: ["CharacteristicSets-Last-Modified"]) { (txn) -> Int in
@@ -469,5 +484,30 @@ extension DiomedeQuadStore {
                 return 0
             }
         }
+    }
+}
+
+extension CharacteristicIDSet {
+    public func asData() throws -> Data {
+        // NOTE: this does not contain the graph ID, which is serialized in the key
+        var value = [count]
+        for (pred, count) in predCounts {
+            value.append(contentsOf: [Int(pred), count.sum, count.min, count.max])
+        }
+        let valueData = value.asData()
+        return valueData
+    }
+    
+    public static func fromData(_ data: Data, in gid: TermID) throws -> Self {
+        var values = [Int].fromData(data)
+        let count = values[0]
+        values.removeFirst()
+        let pairs = stride(from: 0, to: values.endIndex, by: 4).map {
+            (UInt64(values[$0]), PredicateCount(sum: values[$0.advanced(by: 1)], min: values[$0.advanced(by: 2)], max: values[$0.advanced(by: 3)]))
+        }
+        let predCounts = Dictionary(uniqueKeysWithValues: pairs)
+        let preds = Set(predCounts.keys)
+        let cs = CharacteristicIDSet(graph: gid, predicates: preds, count: count, predCounts: predCounts)
+        return cs
     }
 }
