@@ -158,7 +158,7 @@ Optional databases used for indexing may also be present:
 
 	This is a database containing an encoding of the [Characteristic Sets](http://www.csd.uoc.gr/~hy561/papers/storageaccess/optimization/Characteristic%20Sets.pdf) for each named graph in the database.
 	The keys in the database are a pair (graph term ID, sequence number), encoded as 2 concatenated 8-byte integers.
-	The values are arrays of 8-byte integers in which the first element is the total cardinality for the Characteristic Set, and the remaining elements are (predicate term ID, occurrence count) pairs.
+	The values are arrays of 8-byte integers in which the first element is the total cardinality for the Characteristic Set, and the remaining elements are (predicate term ID, total occurrence count, min occurrences, max occurrences) tuples.
 
 ## Term Encoding
 
