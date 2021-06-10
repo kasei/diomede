@@ -27,15 +27,29 @@ func humanReadable(bytes: Int) -> String{
     return "\(size)\(unit)"
 }
 
-func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet) {
+func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet, depth: Int = 0) {
     let sets = dataset.sets.sorted { $0.count >= $1.count }
     print("")
+    let indent = String(repeating: "    ", count: depth)
     for set in sets {
-        print("Characteristic Set: count = \(set.count)")
+        print("\(indent)Characteristic Set: count = \(set.count)")
         for pred in set.predicates.sorted() {
             let predCount = set.predCounts[pred]!
             let occurences = predCount.sum
-            print(String(format: "    %4d \(pred)", occurences))
+            print(String(format: "\(indent)    %4d \(pred)", occurences))
+        }
+        print("")
+    }
+}
+
+func printTypeSets(for graph: Term, in dataset: TypeDataSet, depth: Int = 0) {
+    let sets = dataset.sets.sorted { $0.count >= $1.count }
+    print("")
+    let indent = String(repeating: "    ", count: depth)
+    for set in sets {
+        print("\(indent)Type Set: count = \(set.count)")
+        for type in set.types.sorted() {
+            print("\(indent)    \(type)")
         }
         print("")
     }
@@ -173,6 +187,7 @@ guard let e = Environment(path: path) else {
 }
 
 let csDatabaseName = "characteristicSets"
+let tsDatabaseName = "typeSets"
 
 let indexes = e.database(named: DiomedeQuadStore.StaticDatabases.fullIndexes.rawValue)!
 var availableQuadIndexes = Set<String>()
@@ -269,6 +284,23 @@ if op == "stats" {
         }
     }
     
+    if databases.contains(tsDatabaseName) {
+        if let db = e.database(named: tsDatabaseName) {
+            try e.read { (txn) in
+                let bytes = db.size(txn: txn)
+                print("  - Type Sets (\(humanReadable(bytes: bytes)))")
+                return 0
+            }
+            let count = try db.count()
+            if gcount > 0 {
+                let avg = count / gcount
+                print("    - \(count) sets (~\(avg) per graph)")
+            } else {
+                print("    - \(count) sets")
+            }
+        }
+    }
+    
     //} else if op == "load" || op == "import" {
     //    let filename = args[2]
     //    let url = URL(fileURLWithPath: filename)
@@ -343,6 +375,9 @@ if op == "stats" {
     if name == "cs" {
         print("Generating Characteristic Sets index")
         try qs.computeCharacteristicSets()
+    } else if name == "ts" {
+        print("Generating Type Sets index")
+        try qs.computeTypeSets()
     } else {
         guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
             throw DiomedeError.indexError
@@ -363,6 +398,9 @@ if op == "stats" {
     if name == "cs" {
         print("Dropping Characteristic Sets index")
         try qs.dropCharacteristicSets()
+    } else if name == "ts" {
+        print("Dropping Type Sets index")
+        try qs.dropTypeSets()
     } else {
         if availableQuadIndexes.count == 1 {
             print("WARNING: Insert performance will degrade as a result of removing the only remaining quad index.")
@@ -423,6 +461,9 @@ if op == "stats" {
     let databases = Set(try e.databases())
     if databases.contains(csDatabaseName) {
         print("cs")
+    }
+    if databases.contains(tsDatabaseName) {
+        print("ts")
     }
 } else if op == "bestIndex" {
     guard let qs = DiomedeQuadStore(path: path) else {
@@ -504,7 +545,7 @@ if op == "stats" {
                 print("Graph: \(graph)")
                 let dataset = try qs.characteristicSets(for: graph)
                 count += dataset.sets.count
-                printCharacteristicSets(for: graph, in: dataset)
+                printCharacteristicSets(for: graph, in: dataset, depth: 1)
             }
             print("Total Number of Characteristic Sets: \(count) ")
         } else {
@@ -514,10 +555,51 @@ if op == "stats" {
                 let dataset = try qs.characteristicSets(for: graph)
                 
                 print("Graph: \(graph)")
-                printCharacteristicSets(for: graph, in: dataset)
+                printCharacteristicSets(for: graph, in: dataset, depth: 1)
                 print("Number of Characteristic Sets: \(dataset.sets.count) ")
             } catch DiomedeError.nonExistentTermError {
                 print("No characteristic set found for graph \(graph)")
+            }
+        }
+    } catch DiomedeError.indexError {
+        print("No characteristic sets index found")
+    }
+} else if op == "ts" {
+    guard let qs = DiomedeQuadStore(path: path) else {
+        print("Failed to construct quadstore")
+        exit(1)
+    }
+
+    let databases = Set(try e.databases())
+    if !databases.contains(tsDatabaseName) {
+        print("No Type Sets index found")
+        exit(1)
+    }
+
+    do {
+        if qs.hasTypeSets {
+            print("Type Sets are accurate: \(qs.typeSetsAreAccurate)")
+        }
+        if args.count <= 2 {
+            var count = 0
+            for graph in qs.graphs() {
+                print("Graph: \(graph)")
+                let dataset = try qs.typeSets(for: graph)
+                count += dataset.sets.count
+                printTypeSets(for: graph, in: dataset, depth: 1)
+            }
+            print("Total Number of Type Sets: \(count) ")
+        } else {
+            let line = args[2]
+            let graph = Term(iri: line)
+            do {
+                let dataset = try qs.typeSets(for: graph)
+                
+                print("Graph: \(graph)")
+                printTypeSets(for: graph, in: dataset, depth: 1)
+                print("Number of Type Sets: \(dataset.sets.count) ")
+            } catch DiomedeError.nonExistentTermError {
+                print("No type set found for graph \(graph)")
             }
         }
     } catch DiomedeError.indexError {
