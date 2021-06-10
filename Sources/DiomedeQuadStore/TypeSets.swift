@@ -379,43 +379,6 @@ extension DiomedeQuadStore {
 //            print("no-op")
         }
     }
-    
-    public func computeTypeSets() throws {
-        let indexName = "typeSets"
-        let databases = Set(try env.databases())
-        if databases.contains(indexName) {
-            guard let index = self.env.database(named: indexName) else {
-                throw DiomedeError.indexError
-            }
-            try index.clear()
-        } else {
-            try self.write { (txn) -> Int in
-                try self.env.createDatabase(txn: txn, named: indexName)
-                return 0
-            }
-        }
-    
-        for graph in self.graphs() {
-            let sets = try TypeDataSet(self, in: graph)
-            guard let gid = try self.id(for: graph) else {
-                throw DiomedeError.nonExistentTermError
-            }
-            
-            var pairs = [(Data, Data)]()
-            for (i, cs) in sets.enumerated() {
-                let key = [Int(gid), i]
-                let keyData = key.asData()
-                let valueData = try cs.asData()
-                pairs.append((keyData, valueData))
-            }
-
-            try self.write(mtimeHeaders: ["TypeSets-Last-Modified"]) { (txn) -> Int in
-                let index = self.env.database(txn: txn, named: indexName)!
-                try index.insert(txn: txn, uniqueKeysWithValues: pairs)
-                return 0
-            }
-        }
-    }
 }
 
 extension TypeIDSet {

@@ -33,10 +33,14 @@ func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet,
     let indent = String(repeating: "    ", count: depth)
     for set in sets {
         print("\(indent)Characteristic Set: count = \(set.count)")
+        for (types, count) in set.types {
+            let typeset = types.sorted().map { "\($0)" }.joined(separator: ", ")
+            print(String(format: "\(indent)    typeset = %4d \(typeset)", count))
+        }
         for pred in set.predicates.sorted() {
             let predCount = set.predCounts[pred]!
             let occurences = predCount.sum
-            print(String(format: "\(indent)    %4d \(pred)", occurences))
+            print(String(format: "\(indent)    pred = %4d \(pred)", occurences))
         }
         print("")
     }
@@ -377,7 +381,7 @@ if op == "stats" {
         try qs.computeCharacteristicSets()
     } else if name == "ts" {
         print("Generating Type Sets index")
-        try qs.computeTypeSets()
+        try qs.computeCharacteristicSets(withTypeSets: true)
     } else {
         guard let indexOrder = DiomedeQuadStore.IndexOrder(rawValue: name) else {
             throw DiomedeError.indexError
@@ -398,6 +402,7 @@ if op == "stats" {
     if name == "cs" {
         print("Dropping Characteristic Sets index")
         try qs.dropCharacteristicSets()
+        try qs.dropTypeSets()
     } else if name == "ts" {
         print("Dropping Type Sets index")
         try qs.dropTypeSets()
@@ -543,7 +548,7 @@ if op == "stats" {
             var count = 0
             for graph in qs.graphs() {
                 print("Graph: \(graph)")
-                let dataset = try qs.characteristicSets(for: graph)
+                let dataset = try qs.characteristicSets(for: graph, includeTypeSets: qs.hasTypeSets)
                 count += dataset.sets.count
                 printCharacteristicSets(for: graph, in: dataset, depth: 1)
             }
@@ -552,7 +557,7 @@ if op == "stats" {
             let line = args[2]
             let graph = Term(iri: line)
             do {
-                let dataset = try qs.characteristicSets(for: graph)
+                let dataset = try qs.characteristicSets(for: graph, includeTypeSets: qs.hasTypeSets)
                 
                 print("Graph: \(graph)")
                 printCharacteristicSets(for: graph, in: dataset, depth: 1)

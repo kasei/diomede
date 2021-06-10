@@ -62,6 +62,7 @@ public struct CharacteristicIDSet: Codable {
     public var graph: TermID
     public var count: Int
     public var predCounts: [TermID: PredicateCount]
+    public var types: [Set<TermID>: Int]
     // NOTE: whenever new variables are added here, they must be serialized and deserialized
     //       in the CharacteristicIDSet extension below that implements asData()/fromData().
 
@@ -69,12 +70,14 @@ public struct CharacteristicIDSet: Codable {
         self.count = 0
         self.graph = graph
         self.predCounts = [:]
+        self.types = [:]
     }
 
-    public init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: PredicateCount]) {
+    public init(graph: TermID, predicates: Set<TermID>, count: Int, predCounts: [TermID: PredicateCount], types: [Set<TermID>: Int]) {
         self.count = count
         self.graph = graph
         self.predCounts = predCounts
+        self.types = types
     }
 
     public mutating func formUnion(_ other: CharacteristicIDSet) {
@@ -82,6 +85,7 @@ public struct CharacteristicIDSet: Codable {
         for (tid, pc) in other.predCounts {
             self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
         }
+        self.types.merge(other.types) { $0 + $1 }
     }
 
     public func union(_ other: CharacteristicIDSet) -> CharacteristicIDSet {
@@ -89,16 +93,20 @@ public struct CharacteristicIDSet: Codable {
         var predCounts = self.predCounts
         predCounts.merge(other.predCounts) { $0.union($1) }
         let preds = Set(predCounts.keys)
-        return CharacteristicIDSet(graph: self.graph, predicates: preds, count: count, predCounts: predCounts)
+        return CharacteristicIDSet(graph: self.graph, predicates: preds, count: count, predCounts: predCounts, types: self.types.merging(other.types) { $0 + $1 })
     }
 
-    public mutating func addStar(_ quadids: [[TermID]]) {
+    public mutating func addStar(_ quadids: [[TermID]], withTypePredicateID typeID: TermID) {
         // caller is responsible for ensuring that all added stars have the same predicates
         self.count += 1
         let grouped = Dictionary(grouping: quadids, by: { $0[1] })
         for (pid, quadids) in grouped {
             let count = quadids.count
             predCounts[pid, default: PredicateCount(sum: 0, min: Int.max, max: Int.min)].addMultiplicity(count)
+            if pid == typeID {
+                let starTypes = Set(quadids.map { $0[2] })
+                types[starTypes, default: 0] += 1
+            }
         }
     }
     
@@ -114,31 +122,42 @@ public struct CharacteristicIDSet: Codable {
 public struct CharacteristicSet: Codable {
     public var count: Int
     public var predCounts: [Term: PredicateCount]
+    public var types: [Set<Term>: Int]
     
     public init(_ cs: CharacteristicIDSet, from store: DiomedeQuadStore) {
         self.count = cs.count
         self.predCounts = [:]
+        self.types = [:]
         for (tid, predcount) in cs.predCounts {
             let terms = store.termIterator(fromIds: [tid])
             let term = terms.next()!
             self.predCounts[term] = predcount
+        }
+        for (tids, count) in cs.types {
+            let terms = Set(store.termIterator(fromIds: Array(tids)))
+            self.types[terms] = count
         }
     }
     
     public init(predicates: Set<Term>) {
         self.count = 0
         self.predCounts = Dictionary(uniqueKeysWithValues: predicates.map { ($0, PredicateCount(sum: 1, min: 1, max: 1)) })
+        self.types = [:]
     }
 
-    public init(predicates: Set<Term>, count: Int, predCounts: [Term: PredicateCount]) {
+    public init(predicates: Set<Term>, count: Int, predCounts: [Term: PredicateCount], types: [Set<Term>: Int]) {
         self.count = count
         self.predCounts = predCounts
+        self.types = types
     }
 
     public mutating func formUnion(_ other: CharacteristicSet) {
         self.count += other.count
         for (tid, pc) in other.predCounts {
             self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
+        }
+        for (tids, count) in other.types {
+            self.types[tids, default: 0] += count
         }
     }
 
@@ -147,7 +166,8 @@ public struct CharacteristicSet: Codable {
         var predCounts = self.predCounts
         predCounts.merge(other.predCounts) { $0.union($1) }
         let preds = Set(predCounts.keys)
-        return CharacteristicSet(predicates: preds, count: count, predCounts: predCounts)
+        let allTypes = types.merging(other.types) { $0 + $1}
+        return CharacteristicSet(predicates: preds, count: count, predCounts: predCounts, types: allTypes)
     }
 
     public var predicates: Set<Term> {
@@ -201,6 +221,8 @@ public struct CharacteristicDataSet {
             throw DiomedeError.indexError
         }
         
+        let typeid = (try? store.id(for: Term.rdf("type"))) ?? 0
+        
         let quadIds = try store.quadIds(usingIndex: index, withPrefix: [gid])
         for tids in quadIds {
             let t = tids[0..<3]
@@ -209,7 +231,7 @@ public struct CharacteristicDataSet {
                 let predicates = triples.map { $0[1] }
                 let set = Set(predicates)
                 
-                css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
+                css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples, withTypePredicateID: typeid)
                 triples = []
             }
             triples.append(Array(t))
@@ -221,7 +243,7 @@ public struct CharacteristicDataSet {
             let predicates = triples.map { $0[1] }
             let set = Set(predicates)
 
-            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
+            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples, withTypePredicateID: typeid)
         }
         
         characteristicSets.append(contentsOf: css.values)
@@ -245,11 +267,13 @@ public struct CharacteristicDataSet {
         guard let gid = try store.id(for: graph) else {
             throw DiomedeError.indexError
         }
-        
+
+        let typeid = (try? store.id(for: Term.rdf("type"))) ?? 0
+
         for (_, triples) in triples {
             let predicates = triples.map { $0[1] }
             let set = Set(predicates)
-            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples)
+            css[set, default: CharacteristicIDSet(graph: gid)].addStar(triples, withTypePredicateID: typeid)
         }
         
         characteristicSets.append(contentsOf: css.values)
@@ -309,7 +333,7 @@ public struct CharacteristicDataSet {
         }
         
         var subset = CharacteristicIDSet(graph: gid)
-        subset.addStar(termIds.map { [0, $0, 0, 0] })
+        subset.addStar(termIds.map { [0, $0, 0, 0] }, withTypePredicateID: 0)
         // the counts don't matter in this CharacteristicIDSet because it will only be used
         // in a subsequent code to match supersets (which will contain real counts of the data).
         return subset
@@ -410,10 +434,11 @@ extension DiomedeQuadStore {
         return false
     }
     
-    public func characteristicSets(for graph: Term) throws -> CharacteristicDataSet {
-        let indexName = "characteristicSets"
+    public func characteristicSets(for graph: Term, includeTypeSets: Bool = false) throws -> CharacteristicDataSet {
+        let csIndexName = "characteristicSets"
+        let typeIndexName = "typeSets"
         
-        guard let index = self.env.database(named: indexName) else {
+        guard let index = self.env.database(named: csIndexName) else {
             throw DiomedeError.indexError
         }
         guard let gid = try self.id(for: graph) else {
@@ -423,16 +448,41 @@ extension DiomedeQuadStore {
         let lower = [Int(gid), 0].asData()
         let upper = [Int(gid+1), 0].asData()
         
-        var sets = [CharacteristicIDSet]()
+        var setsWithBounds = [(CharacteristicIDSet, Data, Data)]()
         try index.iterate(between: lower, and: upper) { (k, v) in
             let key = [Int].fromData(k)
             guard key[0] == gid else {
                 return
             }
             let cs = try CharacteristicIDSet.fromData(v, in: gid)
-            sets.append(cs)
+            let i = key[1]
+            let lower = [Int(gid), i, 0].asData()
+            let upper = [Int(gid), i+1, 0].asData()
+            setsWithBounds.append((cs, lower, upper)) // these are the bounds to look up corresponding Type Set records for this CS
         }
-        return try CharacteristicDataSet(self, characteristicSets: sets)
+        
+        if includeTypeSets {
+            guard let typeIndex = self.env.database(named: typeIndexName) else {
+                throw DiomedeError.indexError
+            }
+            var sets = [CharacteristicIDSet]()
+            for (cs, lower, upper) in setsWithBounds {
+                var cs = cs
+                try typeIndex.iterate(between: lower, and: upper) { (k, v) in
+                    let key = [Int].fromData(k)
+                    guard key[0] == gid else {
+                        return
+                    }
+                    let ts = try TypeIDSet.fromData(v, in: gid)
+                    cs.types[ts.types] = ts.count
+                }
+                sets.append(cs)
+            }
+            return try CharacteristicDataSet(self, characteristicSets: sets)
+        } else {
+            let sets = setsWithBounds.map { $0.0 }
+            return try CharacteristicDataSet(self, characteristicSets: sets)
+        }
     }
     
     public func dropCharacteristicSets() throws {
@@ -449,17 +499,35 @@ extension DiomedeQuadStore {
         }
     }
     
-    public func computeCharacteristicSets() throws {
-        let indexName = "characteristicSets"
+    public func computeCharacteristicSets(withTypeSets: Bool = false) throws {
+        let csIndexName = "characteristicSets"
         let databases = Set(try env.databases())
-        if databases.contains(indexName) {
-            guard let index = self.env.database(named: indexName) else {
+
+        let typeIndexName = "typeSets"
+
+        if databases.contains(csIndexName) {
+            guard let index = self.env.database(named: csIndexName) else {
                 throw DiomedeError.indexError
             }
             try index.clear()
+            
+            if databases.contains(typeIndexName) {
+                guard let index = self.env.database(named: typeIndexName) else {
+                    throw DiomedeError.indexError
+                }
+                try index.clear()
+            } else if withTypeSets {
+                try self.write { (txn) -> Int in
+                    try self.env.createDatabase(txn: txn, named: typeIndexName)
+                    return 0
+                }
+            }
         } else {
             try self.write { (txn) -> Int in
-                try self.env.createDatabase(txn: txn, named: indexName)
+                try self.env.createDatabase(txn: txn, named: csIndexName)
+                if withTypeSets {
+                    try self.env.createDatabase(txn: txn, named: typeIndexName)
+                }
                 return 0
             }
         }
@@ -470,17 +538,36 @@ extension DiomedeQuadStore {
                 throw DiomedeError.nonExistentTermError
             }
             
-            var pairs = [(Data, Data)]()
+            var csPairs = [(Data, Data)]()
+            var typePairs = [(Data, Data)]()
             for (i, cs) in sets.enumerated() {
                 let key = [Int(gid), i]
                 let keyData = key.asData()
                 let valueData = try cs.asData()
-                pairs.append((keyData, valueData))
+                csPairs.append((keyData, valueData))
+                if withTypeSets {
+                    let typeCombinations = cs.types.keys
+                    for (j, tc) in typeCombinations.enumerated() {
+                        let count = cs.types[tc]!
+                        let subkey = key + [j]
+                        let subKeyData = subkey.asData()
+
+                        let tids = TypeIDSet(graph: gid, types: tc, count: count)
+                        let typesData = try tids.asData()
+                        typePairs.append((subKeyData, typesData))
+                        
+                        
+                    }
+                }
             }
 
             try self.write(mtimeHeaders: ["CharacteristicSets-Last-Modified"]) { (txn) -> Int in
-                let index = self.env.database(txn: txn, named: indexName)!
-                try index.insert(txn: txn, uniqueKeysWithValues: pairs)
+                let csIndex = self.env.database(txn: txn, named: csIndexName)!
+                try csIndex.insert(txn: txn, uniqueKeysWithValues: csPairs)
+                if withTypeSets {
+                    let typeIndex = self.env.database(txn: txn, named: typeIndexName)!
+                    try typeIndex.insert(txn: txn, uniqueKeysWithValues: typePairs)
+                }
                 return 0
             }
         }
@@ -507,7 +594,7 @@ extension CharacteristicIDSet {
         }
         let predCounts = Dictionary(uniqueKeysWithValues: pairs)
         let preds = Set(predCounts.keys)
-        let cs = CharacteristicIDSet(graph: gid, predicates: preds, count: count, predCounts: predCounts)
+        let cs = CharacteristicIDSet(graph: gid, predicates: preds, count: count, predCounts: predCounts, types: [:])
         return cs
     }
 }
