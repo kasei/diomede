@@ -351,8 +351,8 @@ extension DiomedeQuadStore {
             throw DiomedeError.nonExistentTermError
         }
 
-        let lower = [Int(gid), 0].asData()
-        let upper = [Int(gid+1), 0].asData()
+        let lower = [Int(gid), 0, 0].asData()
+        let upper = [Int(gid+1), 0, 0].asData()
         
         var sets = [TypeIDSet]()
         try index.iterate(between: lower, and: upper) { (k, v) in
