@@ -33,14 +33,15 @@ func printCharacteristicSets(for graph: Term, in dataset: CharacteristicDataSet,
     let indent = String(repeating: "    ", count: depth)
     for set in sets {
         print("\(indent)Characteristic Set: count = \(set.count)")
-        for (types, count) in set.types {
+        let pairs = set.types.sorted { $0.value > $1.value }
+        for (types, count) in pairs {
             let typeset = types.sorted().map { "\($0)" }.joined(separator: ", ")
-            print(String(format: "\(indent)    typeset = %4d \(typeset)", count))
+            print(String(format: "\(indent)    typeset = %6d \(typeset)", count))
         }
         for pred in set.predicates.sorted() {
             let predCount = set.predCounts[pred]!
             let occurences = predCount.sum
-            print(String(format: "\(indent)    pred = %4d \(pred)", occurences))
+            print(String(format: "\(indent)    pred    = %6d \(pred)", occurences))
         }
         print("")
     }
