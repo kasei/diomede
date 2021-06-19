@@ -280,7 +280,7 @@ if op == "stats" {
                 return 0
             }
             let count = try db.count()
-            if gcount > 0 {
+            if gcount > 1 {
                 let avg = count / gcount
                 print("    - \(count) sets (~\(avg) per graph)")
             } else {
@@ -297,7 +297,7 @@ if op == "stats" {
                 return 0
             }
             let count = try db.count()
-            if gcount > 0 {
+            if gcount > 1 {
                 let avg = count / gcount
                 print("    - \(count) sets (~\(avg) per graph)")
             } else {
@@ -440,7 +440,19 @@ if op == "stats" {
     let qp = QuadPattern.all
     let i = try qs.quads(matching: qp)
     for q in i {
-        print(q)
+        print(q.fullDescription)
+    }
+} else if op == "quadids" {
+    let quads = e.database(named: "quads")!
+    try quads.iterate { (_, qidsData) in
+        var tids = [Int]()
+        let strideBy = qidsData.count / 4
+        for i in stride(from: 0, to: qidsData.count, by: strideBy) {
+            let data = qidsData[i..<(i+strideBy)]
+            let tid = Int.fromData(data)
+            tids.append(tid)
+        }
+        print(tids)
     }
 } else if op == "graphterms" {
     let line = args[2]
