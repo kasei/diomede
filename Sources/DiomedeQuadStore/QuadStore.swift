@@ -599,7 +599,7 @@ extension DiomedeQuadStore {
             do {
                 var quads = [Quad]()
                 let chunk = quadIds.prefix(chunkSize)
-                quadIds.removeFirst(min(chunkSize, quadIds.count))
+                quadIds.removeFirst(chunk.count)
                 try self.env.read { (txn) -> Int in
                     QUAD: for tids in chunk {
                         var terms = [Term]()
@@ -611,7 +611,7 @@ extension DiomedeQuadStore {
                                 terms.append(term)
                                 cache[tid] = term
                             } else {
-                                print("iterateQuads[]: no term for ID \(tid)")
+                                print("*** iterateQuads[]: no term for ID \(tid)")
                                 continue QUAD
                             }
                         }
@@ -1034,6 +1034,7 @@ extension DiomedeQuadStore {
                 return 0
             }
         } catch DiomedeError.nonExistentTermError {
+            // pattern contains a term that is not in the database, so there can be no matching quads
             return []
         }
         
@@ -1049,6 +1050,7 @@ extension DiomedeQuadStore {
             }
             return true
         }
+        
         if let index = bestIndex {
             //            print("using index \(index.rawValue)")
             let quadIds = try self.quadIds(usingIndex: index, withPrefix: prefix)
@@ -1637,7 +1639,6 @@ extension DiomedeQuadStore {
                 }
                 do {
                     var termIds = [Int]()
-                    var newTerms = 0
                     for (i, t) in q.enumerated() {
                         let d = try t.asData()
                         let term_key = try t.sha256()
@@ -1645,7 +1646,6 @@ extension DiomedeQuadStore {
                         if let _tid = terms[term_key] {
                             tid = _tid
                         } else {
-                            newTerms += 1
                             tid = next_term_id
                             let i2t_pair = (tid, d)
                             let t2i_pair = (term_key, tid)
@@ -1661,12 +1661,6 @@ extension DiomedeQuadStore {
                         }
                     }
                     assert(termIds.count == 4)
-                    
-                    // if newTerms == 0, all the terms in this quad were already in the database,
-                    // and so we need to check below if this quad is already in the quads table
-                    // (and indexes) and prevent it from being inserted twice.
-                    // if newTerms > 0, then it necessarily can't be in the quads table or indexes
-                    // because at least one term ID did not exist until just now.
                     quadIds.insert(termIds)
                 } catch DiomedeError.mapFullError {
                     print("Failed to load data.")
@@ -1716,7 +1710,7 @@ extension DiomedeQuadStore {
             var next_quad_id = try stats_db.get(txn: txn, key: NextIDKey.quad.rawValue).map { Int.fromData($0) } ?? 1
 
             var graphIds = Set<Int>()
-            var quadIds_verifyUnique = [[Int]: Bool]()
+            var quadIds = Set<[Int]>()
             for (i, q) in quads.enumerated() {
                 let j = i + 1
                 if j % 1000 == 0 {
@@ -1730,7 +1724,6 @@ extension DiomedeQuadStore {
                 }
                 do {
                     var termIds = [Int]()
-                    var newTerms = 0
                     for (i, t) in q.enumerated() {
                         let d = try t.asData()
                         let term_key = try t.sha256()
@@ -1738,7 +1731,6 @@ extension DiomedeQuadStore {
                         if let eid = try self.t2i_db.get(txn: txn, key: term_key) {
                             tid = Int.fromData(eid)
                         } else {
-                            newTerms += 1
                             tid = next_term_id
                             let i2t_pair = (tid, d)
                             let t2i_pair = (term_key, tid)
@@ -1753,13 +1745,7 @@ extension DiomedeQuadStore {
                         }
                     }
                     assert(termIds.count == 4)
-                    
-                    // if newTerms == 0, all the terms in this quad were already in the database,
-                    // and so we need to check below if this quad is already in the quads table
-                    // (and indexes) and prevent it from being inserted twice.
-                    // if newTerms > 0, then it necessarily can't be in the quads table or indexes
-                    // because at least one term ID did not exist until just now.
-                    quadIds_verifyUnique[termIds] = (newTerms == 0)
+                    quadIds.insert(termIds)
                 } catch DiomedeError.mapFullError {
                     print("Failed to load data.")
                     throw DiomedeError.mapFullError
@@ -1775,19 +1761,6 @@ extension DiomedeQuadStore {
                 (NextIDKey.term.rawValue, next_term_id),
             ])
 
-            let quadIds = try quadIds_verifyUnique.filter { (pair) throws -> Bool in
-                if pair.value {
-                    let tids = pair.key.map { UInt64($0) }
-                    let exists = try self.quadExists(withIds: tids)
-                    if exists {
-//                        print("*** quad alread exits in the database: \(tids)")
-                    }
-                    return !exists
-                } else {
-                    return true
-                }
-            }.map { $0.key }
-            
             var quadPairs = [(Int, [Int])]()
             for tids in quadIds {
                 let qid = next_quad_id
