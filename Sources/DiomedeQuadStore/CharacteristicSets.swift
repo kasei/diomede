@@ -397,7 +397,7 @@ extension CharacteristicSet: CustomDebugStringConvertible {
 
 extension CharacteristicIDSet: CustomDebugStringConvertible {
     public var debugDescription: String {
-        return "CharacteristicIDSet(\(count); \(predicates.sorted()))"
+        return "CharacteristicIDSet(\(count); \(types); \(predicates.sorted()))"
     }
 }
 
