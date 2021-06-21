@@ -80,20 +80,32 @@ public struct CharacteristicIDSet: Codable {
         self.types = types
     }
 
-    public mutating func formUnion(_ other: CharacteristicIDSet) {
+    public mutating func formAggregation(_ other: CharacteristicIDSet) {
         self.count += other.count
-        for (tid, pc) in other.predCounts {
-            self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
+        let sharedPredicates = self.predicates.intersection(other.predicates)
+        var updatedPredCounts = [TermID : PredicateCount]()
+        for tid in sharedPredicates {
+            guard let thisPredCounts = self.predCounts[tid],
+                  let otherPredCounts = other.predCounts[tid] else { continue }
+            updatedPredCounts[tid] = thisPredCounts.union(otherPredCounts)
         }
+        self.predCounts = updatedPredCounts
         self.types.merge(other.types) { $0 + $1 }
     }
 
-    public func union(_ other: CharacteristicIDSet) -> CharacteristicIDSet {
+    public func aggregate(_ other: CharacteristicIDSet) -> CharacteristicIDSet {
         let count = self.count + other.count
-        var predCounts = self.predCounts
-        predCounts.merge(other.predCounts) { $0.union($1) }
-        let preds = Set(predCounts.keys)
-        return CharacteristicIDSet(graph: self.graph, predicates: preds, count: count, predCounts: predCounts, types: self.types.merging(other.types) { $0 + $1 })
+
+        let sharedPredicates = self.predicates.intersection(other.predicates)
+        var updatedPredCounts = [TermID : PredicateCount]()
+        for tid in sharedPredicates {
+            guard let thisPredCounts = self.predCounts[tid],
+                  let otherPredCounts = other.predCounts[tid] else { continue }
+            updatedPredCounts[tid] = thisPredCounts.union(otherPredCounts)
+        }
+
+        let allTypes = types.merging(other.types) { $0 + $1 }
+        return CharacteristicIDSet(graph: self.graph, predicates: sharedPredicates, count: count, predCounts: updatedPredCounts, types: allTypes)
     }
 
     public mutating func addStar(_ quadids: [[TermID]], withTypePredicateID typeID: TermID) {
@@ -151,23 +163,34 @@ public struct CharacteristicSet: Codable {
         self.types = types
     }
 
-    public mutating func formUnion(_ other: CharacteristicSet) {
+    public mutating func formAggregation(_ other: CharacteristicSet) {
         self.count += other.count
-        for (tid, pc) in other.predCounts {
-            self.predCounts[tid, default: PredicateCount(sum: 0, min: 0, max: 0)].formUnion(pc)
+        let sharedPredicates = self.predicates.intersection(other.predicates)
+        var updatedPredCounts = [Term : PredicateCount]()
+        for tid in sharedPredicates {
+            guard let thisPredCounts = self.predCounts[tid],
+                  let otherPredCounts = other.predCounts[tid] else { continue }
+            updatedPredCounts[tid] = thisPredCounts.union(otherPredCounts)
         }
+        self.predCounts = updatedPredCounts
         for (tids, count) in other.types {
             self.types[tids, default: 0] += count
         }
     }
 
-    public func union(_ other: CharacteristicSet) -> CharacteristicSet {
+    public func aggregate(_ other: CharacteristicSet) -> CharacteristicSet {
         let count = self.count + other.count
-        var predCounts = self.predCounts
-        predCounts.merge(other.predCounts) { $0.union($1) }
-        let preds = Set(predCounts.keys)
-        let allTypes = types.merging(other.types) { $0 + $1}
-        return CharacteristicSet(predicates: preds, count: count, predCounts: predCounts, types: allTypes)
+
+        let sharedPredicates = self.predicates.intersection(other.predicates)
+        var updatedPredCounts = [Term : PredicateCount]()
+        for tid in sharedPredicates {
+            guard let thisPredCounts = self.predCounts[tid],
+                  let otherPredCounts = other.predCounts[tid] else { continue }
+            updatedPredCounts[tid] = thisPredCounts.union(otherPredCounts)
+        }
+
+        let allTypes = types.merging(other.types) { $0 + $1 }
+        return CharacteristicSet(predicates: sharedPredicates, count: count, predCounts: updatedPredCounts, types: allTypes)
     }
 
     public var predicates: Set<Term> {
@@ -303,7 +326,11 @@ public struct CharacteristicDataSet {
         }
         let subset = try self.characteristicIDSet(matching: bgp, in: graph, store: store)
         let matching = characteristicSets.filter { $0.isSuperset(of: subset) }
-        let acs = matching.reduce(CharacteristicIDSet(graph: gid)) { $0.union($1) }
+        guard let first = matching.first else {
+            return CharacteristicIDSet(graph: gid)
+        }
+        
+        let acs = matching.dropFirst().reduce(first) { $0.aggregate($1) }
         return acs
     }
     

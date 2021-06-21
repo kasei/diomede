@@ -70,14 +70,17 @@ class DiomedeTypeSetTests: XCTestCase {
             let acs1 = try cs.aggregatedCharacteristicSet(matching: bgp(for: [ex.p1]), in: g, store: qs)
             XCTAssertEqual(acs1.count, 2)
             XCTAssertEqual(CharacteristicSet(acs1, from: qs).types, [Set([ex.Type1]): 1])
+            XCTAssertEqual(acs1.predicates.count, 1) // [ex.p1]
 
             let acs2 = try cs.aggregatedCharacteristicSet(matching: bgp(for: [ex.p1, rdf.type]), in: g, store: qs)
             XCTAssertEqual(acs2.count, 1)
             XCTAssertEqual(CharacteristicSet(acs2, from: qs).types, [Set([ex.Type1]): 1])
+            XCTAssertEqual(acs2.predicates.count, 2) // [ex.p1, rdf.type]
 
             let acs3 = try cs.aggregatedCharacteristicSet(matching: bgp(for: [rdf.type]), in: g, store: qs)
             XCTAssertEqual(acs3.count, 3)
             XCTAssertEqual(CharacteristicSet(acs3, from: qs).types, [Set([ex.Type1]): 2, Set([ex.Type2]): 1])
+            XCTAssertEqual(acs3.predicates.count, 1) // [rdf.type]
         }
     }
     

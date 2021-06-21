@@ -23,12 +23,12 @@ public struct TypeIDSet: Codable {
         self.types = types
     }
 
-    public mutating func formUnion(_ other: TypeIDSet) {
+    public mutating func formAggregation(_ other: TypeIDSet) {
         self.count += other.count
         self.types.formUnion(other.types)
     }
 
-    public func union(_ other: TypeIDSet) -> TypeIDSet {
+    public func aggregate(_ other: TypeIDSet) -> TypeIDSet {
         let count = self.count + other.count
         let types = self.types
         return TypeIDSet(graph: self.graph, types: types, count: count)
@@ -218,7 +218,7 @@ public struct TypeDataSet {
         
         let subset = try self.typeIDSet(matching: Set(types), in: graph, store: store)
         let matching = typeSets.filter { $0.isSuperset(of: subset) }
-        let acs = matching.reduce(TypeIDSet(graph: gid, types: [])) { $0.union($1) }
+        let acs = matching.reduce(TypeIDSet(graph: gid, types: [])) { $0.aggregate($1) }
         return acs
     }
     
