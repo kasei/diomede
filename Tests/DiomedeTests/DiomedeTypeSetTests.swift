@@ -89,16 +89,3 @@ class DiomedeTypeSetTests: XCTestCase {
         return preds
     }
 }
-
-@dynamicMemberLookup
-struct TermNamespace {
-    var namespace: Namespace
-    init(namespace: Namespace) {
-        self.namespace = namespace
-    }
-    
-    public subscript(dynamicMember member: String) -> Term {
-        let i = namespace.iriString(for: member)
-        return Term(iri: i)
-    }
-}
