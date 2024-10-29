@@ -20,38 +20,38 @@ let package = Package(
         	name: "diomede-db-util",
         	targets: ["diomede-db-util"]),
         .executable(
-        	name: "diomede",
+        	name: "diomede-cli",
         	targets: ["diomede-cli"]),
     ],
     dependencies: [
         .package(url: "https://github.com/agisboye/CLMDB.git", from: "0.9.24"),
-		.package(name: "CryptoSwift", url: "https://github.com/krzyzanowskim/CryptoSwift.git", .upToNextMinor(from: "1.5.0")),
-		.package(name: "SPARQLSyntax", url: "https://github.com/kasei/swift-sparql-syntax.git", .upToNextMinor(from: "0.2.0")),
+		.package(url: "https://github.com/krzyzanowskim/CryptoSwift.git", .upToNextMinor(from: "1.5.0")),
+		.package(url: "https://github.com/kasei/swift-sparql-syntax.git", .upToNextMinor(from: "0.2.0")),
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages which this package depends on.
+        .executableTarget(
+            name: "diomede-db-util",
+            dependencies: ["Diomede"]
+        ),
+        .executableTarget(
+            name: "diomede-cli",
+            dependencies: ["DiomedeQuadStore"]
+        ),
         .target(
             name: "Diomede",
             dependencies: [
             	.product(name: "LMDB", package: "CLMDB"),
-            	"SPARQLSyntax",
+                .product(name: "SPARQLSyntax", package: "swift-sparql-syntax")
             ]),
         .target(
             name: "DiomedeQuadStore",
             dependencies: [
             	"Diomede",
             	"CryptoSwift",
-            	"SPARQLSyntax"
+                .product(name: "SPARQLSyntax", package: "swift-sparql-syntax")
             ]),
-        .target(
-            name: "diomede-db-util",
-            dependencies: ["Diomede"]
-        ),
-        .target(
-            name: "diomede-cli",
-            dependencies: ["DiomedeQuadStore"]
-        ),
         .testTarget(
             name: "DiomedeTests",
             dependencies: ["Diomede", "DiomedeQuadStore"]),

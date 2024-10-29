@@ -101,6 +101,7 @@ class DiomedeQuadStoreTests: XCTestCase {
     
     func testRepeatedDuplicateLoad() throws {
         if let qs = store {
+            XCTAssertEqual(qs.count, 0)
             let q = Quad(subject: Term(iri: "s"), predicate: Term(iri: "p1"), object: Term(string: "o"), graph: Term(iri: "tag:graph"))
             try qs.load(version: 0, quads: [q, q])
             try qs.load(version: 0, quads: [q, q])

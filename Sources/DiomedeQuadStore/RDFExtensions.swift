@@ -73,7 +73,7 @@ extension Data {
     }
 }
 
-extension Term: DataEncodable {
+extension Term: @retroactive DataEncodable {
     public func sha256() throws -> Data {
         let d = try self.asData()
         let term_key = d.sha256()
